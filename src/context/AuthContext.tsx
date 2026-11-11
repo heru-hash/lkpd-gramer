@@ -6,7 +6,10 @@ import {
   signInWithPopup, 
   signOut, 
   onAuthStateChanged,
-  updateProfile
+  updateProfile,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../services/firebase';
@@ -16,10 +19,11 @@ interface AuthContextType {
   currentUser: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
-  login: (email: string, pass: string) => Promise<void>;
+  login: (email: string, pass: string, rememberMe?: boolean) => Promise<void>;
   registerSiswa: (data: { nama: string; nis: string; kelas: string; jurusan: string; email: string; pass: string }) => Promise<void>;
   registerGuru: (data: { nama: string; nip: string; mataPelajaran: string; email: string; pass: string }) => Promise<void>;
   loginWithGoogle: (role?: UserRole) => Promise<void>;
+  loginAsDemoUser: (role: UserRole) => Promise<void>;
   loginAsDemo: (role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   updateUserBio: (updates: Partial<UserProfile>) => Promise<void>;
@@ -27,18 +31,21 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Default mock profiles for instant IFP classroom demonstration
-const DEMO_PROFILES: Record<UserRole, UserProfile> = {
+// Admin email configured for SMANIKE / SMK
+export const SUPER_ADMIN_EMAIL = 'heru@smanike-gresik.sch.id';
+
+// Verified Demo Profiles with strict role definitions for offline / rapid IFP classroom evaluation
+const DEMO_ACCOUNTS: Record<UserRole, UserProfile> = {
   admin: {
-    uid: 'demo-admin-id',
+    uid: 'demo-admin-verified',
     nama: 'Heru Administrator SMK',
-    email: 'heru@smanike-gresik.sch.id',
+    email: SUPER_ADMIN_EMAIL,
     role: 'admin',
     photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
     createdAt: new Date().toISOString()
   },
   guru: {
-    uid: 'demo-guru-id',
+    uid: 'demo-guru-verified',
     nama: 'Bambang Trianto, S.Pd.',
     email: 'bambang.guru@smk.sch.id',
     role: 'guru',
@@ -48,7 +55,7 @@ const DEMO_PROFILES: Record<UserRole, UserProfile> = {
     createdAt: new Date().toISOString()
   },
   siswa: {
-    uid: 'demo-siswa-id',
+    uid: 'demo-siswa-verified',
     nama: 'Ahmad Rizky Pratama',
     email: 'rizky.siswa@smk.sch.id',
     role: 'siswa',
@@ -65,73 +72,84 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Sync profile from Firestore or localStorage fallback
-  const fetchProfile = async (firebaseUser: User) => {
+  // Securely fetch and verify user profile directly from Firestore
+  const fetchAndVerifyProfile = async (firebaseUser: User): Promise<UserProfile> => {
     try {
       const userRef = doc(db, 'users', firebaseUser.uid);
       const snap = await getDoc(userRef);
 
+      const isSuperAdmin = firebaseUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+
       if (snap.exists()) {
-        setUserProfile(snap.data() as UserProfile);
-      } else {
-        // Automatically give admin privileges to heru@smanike-gresik.sch.id or default to siswa
-        const isAdminEmail = firebaseUser.email?.toLowerCase().includes('smanike') || 
-                             firebaseUser.email?.toLowerCase() === 'heru@smanike-gresik.sch.id';
-        const defaultRole: UserRole = isAdminEmail ? 'admin' : 'siswa';
+        const data = snap.data() as UserProfile;
         
-        const initialProfile: UserProfile = {
+        // Strict RBAC: Enforce admin role if super admin email, or preserve stored role
+        const verifiedRole: UserRole = isSuperAdmin ? 'admin' : (data.role || 'siswa');
+
+        const verifiedProfile: UserProfile = {
+          ...data,
           uid: firebaseUser.uid,
-          nama: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Siswa SMK',
+          email: firebaseUser.email || data.email,
+          role: verifiedRole,
+        };
+
+        // If role needed auto-correction for super admin, sync back
+        if (data.role !== verifiedRole) {
+          await updateDoc(userRef, { role: verifiedRole });
+        }
+
+        setUserProfile(verifiedProfile);
+        return verifiedProfile;
+      } else {
+        // Create initial profile on first login (e.g. Google Sign-In)
+        const initialRole: UserRole = isSuperAdmin ? 'admin' : 'siswa';
+        const newProfile: UserProfile = {
+          uid: firebaseUser.uid,
+          nama: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Pengguna SMK',
           email: firebaseUser.email || '',
-          role: defaultRole,
-          kelas: defaultRole === 'siswa' ? 'X RPL 1' : 'Semua Kelas',
-          jurusan: defaultRole === 'siswa' ? 'RPL' : 'Kejuruan',
+          role: initialRole,
+          kelas: initialRole === 'siswa' ? 'X RPL 1' : 'Semua Kelas',
+          jurusan: initialRole === 'siswa' ? 'Rekayasa Perangkat Lunak' : 'Kurikulum Merdeka',
           photoURL: firebaseUser.photoURL || undefined,
           createdAt: new Date().toISOString(),
         };
 
-        await setDoc(userRef, initialProfile);
-        setUserProfile(initialProfile);
+        await setDoc(userRef, newProfile);
+        setUserProfile(newProfile);
+        return newProfile;
       }
     } catch (err) {
-      console.warn('Could not read user profile from Firestore, using fallback:', err);
-      // Construct fallback profile
+      console.warn('Could not read user profile from Firestore, using authenticated session token:', err);
+      const isSuperAdmin = firebaseUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
       const fallback: UserProfile = {
         uid: firebaseUser.uid,
-        nama: firebaseUser.displayName || firebaseUser.email || 'Pengguna SMK',
+        nama: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Pengguna SMK',
         email: firebaseUser.email || '',
-        role: firebaseUser.email?.includes('admin') || firebaseUser.email?.includes('heru') ? 'admin' : 'siswa',
+        role: isSuperAdmin ? 'admin' : 'siswa',
         kelas: 'X RPL 1',
         jurusan: 'Rekayasa Perangkat Lunak'
       };
       setUserProfile(fallback);
+      return fallback;
     }
   };
 
   useEffect(() => {
-    const storedDemo = localStorage.getItem('gcs_demo_role');
-    if (storedDemo && (storedDemo in DEMO_PROFILES)) {
-      setUserProfile(DEMO_PROFILES[storedDemo as UserRole]);
-      setLoading(false);
-      return;
-    }
-
+    // Listen for Firebase Auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
       if (user) {
-        await fetchProfile(user);
+        setCurrentUser(user);
+        await fetchAndVerifyProfile(user);
       } else {
-        // If no user is logged in, check if there's a stored role or default to demo siswa for instant play on touch screen
-        const savedProfile = localStorage.getItem('gcs_active_profile');
-        if (savedProfile) {
-          try {
-            setUserProfile(JSON.parse(savedProfile));
-          } catch {
-            setUserProfile(DEMO_PROFILES.siswa);
-          }
+        // Check if there was an explicitly chosen session
+        const storedRole = sessionStorage.getItem('gcs_session_role');
+        if (storedRole && storedRole in DEMO_ACCOUNTS) {
+          const profile = DEMO_ACCOUNTS[storedRole as UserRole];
+          setUserProfile(profile);
         } else {
-          // Provide default guest student session so interactive board can be tested instantly!
-          setUserProfile(DEMO_PROFILES.siswa);
+          // No user logged in -> Must show login screen!
+          setCurrentUser(null);
+          setUserProfile(null);
         }
       }
       setLoading(false);
@@ -140,31 +158,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, pass: string) => {
+  // Secure Login with Remember Me option
+  const login = async (email: string, pass: string, rememberMe: boolean = true) => {
     setLoading(true);
-    localStorage.removeItem('gcs_demo_role');
+    sessionStorage.removeItem('gcs_session_role');
     try {
-      const res = await signInWithEmailAndPassword(auth, email, pass);
-      await fetchProfile(res.user);
+      // Set persistence based on Remember Me
+      await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
+      const res = await signInWithEmailAndPassword(auth, email.trim(), pass);
+      await fetchAndVerifyProfile(res.user);
     } catch (err: unknown) {
       setLoading(false);
       throw err;
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Student Registration (Strictly restricted to role: 'siswa')
   const registerSiswa = async (data: { nama: string; nis: string; kelas: string; jurusan: string; email: string; pass: string }) => {
     setLoading(true);
-    localStorage.removeItem('gcs_demo_role');
+    sessionStorage.removeItem('gcs_session_role');
     try {
-      const res = await createUserWithEmailAndPassword(auth, data.email, data.pass);
-      await updateProfile(res.user, { displayName: data.nama });
+      const res = await createUserWithEmailAndPassword(auth, data.email.trim(), data.pass);
+      await updateProfile(res.user, { displayName: data.nama.trim() });
 
       const profile: UserProfile = {
         uid: res.user.uid,
-        nama: data.nama,
-        email: data.email,
-        role: 'siswa',
-        nis: data.nis,
+        nama: data.nama.trim(),
+        email: data.email.trim(),
+        role: 'siswa', // Hardcoded strictly to siswa
+        nis: data.nis.trim(),
         kelas: data.kelas,
         jurusan: data.jurusan,
         createdAt: new Date().toISOString()
@@ -175,26 +199,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (e) {
         handleFirestoreError(e, OperationType.CREATE, `users/${res.user.uid}`);
       }
+
       setUserProfile(profile);
+      setCurrentUser(res.user);
     } finally {
       setLoading(false);
     }
   };
 
+  // Teacher Registration (Strictly restricted to role: 'guru')
   const registerGuru = async (data: { nama: string; nip: string; mataPelajaran: string; email: string; pass: string }) => {
     setLoading(true);
-    localStorage.removeItem('gcs_demo_role');
+    sessionStorage.removeItem('gcs_session_role');
     try {
-      const res = await createUserWithEmailAndPassword(auth, data.email, data.pass);
-      await updateProfile(res.user, { displayName: data.nama });
+      const res = await createUserWithEmailAndPassword(auth, data.email.trim(), data.pass);
+      await updateProfile(res.user, { displayName: data.nama.trim() });
+
+      const isSuperAdmin = data.email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
 
       const profile: UserProfile = {
         uid: res.user.uid,
-        nama: data.nama,
-        email: data.email,
-        role: 'guru',
-        nip: data.nip,
-        mataPelajaran: data.mataPelajaran,
+        nama: data.nama.trim(),
+        email: data.email.trim(),
+        role: isSuperAdmin ? 'admin' : 'guru', // Only designated admin email can obtain admin
+        nip: data.nip.trim(),
+        mataPelajaran: data.mataPelajaran.trim(),
         kelas: 'Semua Kelas',
         jurusan: 'Kurikulum Merdeka',
         createdAt: new Date().toISOString()
@@ -205,28 +234,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (e) {
         handleFirestoreError(e, OperationType.CREATE, `users/${res.user.uid}`);
       }
+
       setUserProfile(profile);
+      setCurrentUser(res.user);
     } finally {
       setLoading(false);
     }
   };
 
-  const loginWithGoogle = async (role: UserRole = 'siswa') => {
+  // Google Sign-In with automatic role security
+  const loginWithGoogle = async (requestedRole: UserRole = 'siswa') => {
     setLoading(true);
-    localStorage.removeItem('gcs_demo_role');
+    sessionStorage.removeItem('gcs_session_role');
     try {
       const res = await signInWithPopup(auth, googleProvider);
       const userRef = doc(db, 'users', res.user.uid);
       const snap = await getDoc(userRef);
 
+      const isSuperAdmin = res.user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+
       if (!snap.exists()) {
-        const isAdmin = res.user.email === 'heru@smanike-gresik.sch.id';
+        const assignedRole: UserRole = isSuperAdmin ? 'admin' : (requestedRole === 'admin' ? 'siswa' : requestedRole);
         const profile: UserProfile = {
           uid: res.user.uid,
-          nama: res.user.displayName || 'Pengguna Baru',
+          nama: res.user.displayName || 'Pengguna Google SMK',
           email: res.user.email || '',
-          role: isAdmin ? 'admin' : role,
-          kelas: role === 'siswa' ? 'X RPL 1' : 'Semua Kelas',
+          role: assignedRole,
+          kelas: assignedRole === 'siswa' ? 'X RPL 1' : 'Semua Kelas',
           jurusan: 'SMK',
           photoURL: res.user.photoURL || undefined,
           createdAt: new Date().toISOString()
@@ -234,23 +268,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await setDoc(userRef, profile);
         setUserProfile(profile);
       } else {
-        setUserProfile(snap.data() as UserProfile);
+        await fetchAndVerifyProfile(res.user);
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const loginAsDemo = async (role: UserRole) => {
+  // Secure Classroom Test Mode (Separated in Session Storage only, never persistent across devices)
+  const loginAsDemoUser = async (role: UserRole) => {
     setLoading(true);
-    const demo = DEMO_PROFILES[role];
-    localStorage.setItem('gcs_demo_role', role);
-    localStorage.setItem('gcs_active_profile', JSON.stringify(demo));
+    const demo = DEMO_ACCOUNTS[role];
+    sessionStorage.setItem('gcs_session_role', role);
     setUserProfile(demo);
     setLoading(false);
   };
 
+  // Logout - Clears all authentication state
   const logout = async () => {
+    sessionStorage.removeItem('gcs_session_role');
     localStorage.removeItem('gcs_demo_role');
     localStorage.removeItem('gcs_active_profile');
     try {
@@ -262,15 +298,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(null);
   };
 
+  // Update profile without allowing role tampering
   const updateUserBio = async (updates: Partial<UserProfile>) => {
     if (!userProfile) return;
-    const updated = { ...userProfile, ...updates, updatedAt: new Date().toISOString() };
+
+    // Security guard: Prevent any user from escalating their role or changing UID/email via profile update
+    const sanitizedUpdates: Partial<UserProfile> = { ...updates };
+    delete sanitizedUpdates.role;
+    delete sanitizedUpdates.uid;
+    delete sanitizedUpdates.email;
+
+    const updated = { ...userProfile, ...sanitizedUpdates, updatedAt: new Date().toISOString() };
     setUserProfile(updated);
-    localStorage.setItem('gcs_active_profile', JSON.stringify(updated));
 
     if (currentUser?.uid && !currentUser.uid.startsWith('demo-')) {
       try {
-        await updateDoc(doc(db, 'users', currentUser.uid), updates);
+        await updateDoc(doc(db, 'users', currentUser.uid), sanitizedUpdates);
       } catch (err) {
         console.warn('Profile update Firestore sync error:', err);
       }
@@ -286,7 +329,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       registerSiswa,
       registerGuru,
       loginWithGoogle,
-      loginAsDemo,
+      loginAsDemoUser,
+      loginAsDemo: loginAsDemoUser,
       logout,
       updateUserBio
     }}>

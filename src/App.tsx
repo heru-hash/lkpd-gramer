@@ -105,9 +105,13 @@ function MainApp() {
 
             {activeTab === 'statistik' && <Statistik />}
 
-            {activeTab === 'ai-generator' && <AiQuestionGenerator />}
+            {activeTab === 'ai-generator' && (
+              userProfile.role === 'siswa' ? <Dashboard onNavigate={handleNavigate} /> : <AiQuestionGenerator />
+            )}
 
-            {activeTab === 'admin-panel' && <AdminManagement />}
+            {activeTab === 'admin-panel' && (
+              userProfile.role !== 'admin' ? <Dashboard onNavigate={handleNavigate} /> : <AdminManagement />
+            )}
 
             {activeTab === 'profil' && <Profile />}
 

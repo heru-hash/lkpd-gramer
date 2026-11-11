@@ -29,18 +29,23 @@ service cloud.firestore {
       );
     }
 
-    // Default deny
+    // Default deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Users Collection
+    // Users Collection - Hardened RBAC
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && (isOwner(userId) || isAdmin());
+      // Block privilege escalation: only designated admin email can obtain 'admin' role
+      allow create: if isSignedIn() && isOwner(userId) && (
+        (request.resource.data.role == 'admin' && request.auth.token.email == 'heru@smanike-gresik.sch.id') ||
+        (request.resource.data.role in ['siswa', 'guru'] && request.resource.data.role != 'admin')
+      );
+      // Prevent users from tampering with role, uid, or email
       allow update: if isSignedIn() && (
         isAdmin() || 
-        (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])))
+        (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'uid', 'email'])))
       );
       allow delete: if isAdmin();
     }

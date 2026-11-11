@@ -219,47 +219,49 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                   <p className="text-[11px] text-indigo-400 mt-0.5">{userProfile?.email}</p>
                 </div>
 
-                {/* Instant IFP Touch Switcher */}
-                <div className="py-2 border-b border-slate-800">
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5">
-                    Mode Uji Coba Cepat (IFP)
-                  </p>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <button
-                      onClick={() => { triggerHaptic(); loginAsDemo('siswa'); setShowRoleMenu(false); }}
-                      className={`p-2 rounded-xl text-center text-xs font-bold transition flex flex-col items-center gap-1 border ${
-                        userProfile?.role === 'siswa' 
-                          ? 'bg-emerald-600 text-white border-emerald-400 shadow-sm' 
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-700'
-                      }`}
-                    >
-                      <UserCheck className="w-4 h-4 text-emerald-400" />
-                      <span>Siswa</span>
-                    </button>
-                    <button
-                      onClick={() => { triggerHaptic(); loginAsDemo('guru'); setShowRoleMenu(false); }}
-                      className={`p-2 rounded-xl text-center text-xs font-bold transition flex flex-col items-center gap-1 border ${
-                        userProfile?.role === 'guru' 
-                          ? 'bg-amber-600 text-white border-amber-400 shadow-sm' 
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-700'
-                      }`}
-                    >
-                      <GraduationCap className="w-4 h-4 text-amber-400" />
-                      <span>Guru</span>
-                    </button>
-                    <button
-                      onClick={() => { triggerHaptic(); loginAsDemo('admin'); setShowRoleMenu(false); }}
-                      className={`p-2 rounded-xl text-center text-xs font-bold transition flex flex-col items-center gap-1 border ${
-                        userProfile?.role === 'admin' 
-                          ? 'bg-rose-600 text-white border-rose-400 shadow-sm' 
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-700'
-                      }`}
-                    >
-                      <ShieldCheck className="w-4 h-4 text-rose-400" />
-                      <span>Admin</span>
-                    </button>
+                {/* Secure Simulation Switcher (Only visible to authenticated Administrator) */}
+                {userProfile?.role === 'admin' ? (
+                  <div className="py-2 border-b border-slate-800">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 mb-1.5 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                      Simulasi Peran (Khusus Admin)
+                    </p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        onClick={() => { triggerHaptic(); loginAsDemo('siswa'); setShowRoleMenu(false); }}
+                        className="p-2 rounded-xl text-center text-xs font-bold transition flex flex-col items-center gap-1 bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 active:scale-95"
+                      >
+                        <UserCheck className="w-4 h-4 text-emerald-400" />
+                        <span>Siswa</span>
+                      </button>
+                      <button
+                        onClick={() => { triggerHaptic(); loginAsDemo('guru'); setShowRoleMenu(false); }}
+                        className="p-2 rounded-xl text-center text-xs font-bold transition flex flex-col items-center gap-1 bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 active:scale-95"
+                      >
+                        <GraduationCap className="w-4 h-4 text-amber-400" />
+                        <span>Guru</span>
+                      </button>
+                      <button
+                        onClick={() => { triggerHaptic(); loginAsDemo('admin'); setShowRoleMenu(false); }}
+                        className="p-2 rounded-xl text-center text-xs font-bold transition flex flex-col items-center gap-1 bg-rose-600 text-white border border-rose-400 active:scale-95 shadow-sm"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-rose-200" />
+                        <span>Admin</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="py-2.5 px-2 border-b border-slate-800 text-xs space-y-1">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Status Akun:</span>
+                      <span className="text-emerald-400 font-bold">Terverifikasi Aktif</span>
+                    </div>
+                    <div className="flex justify-between text-slate-400">
+                      <span>Hak Akses:</span>
+                      <span className="text-white font-bold uppercase">{userProfile?.role}</span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="pt-2">
                   <button
