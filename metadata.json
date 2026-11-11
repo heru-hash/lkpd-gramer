@@ -1,0 +1,6 @@
+{
+  "name": "Grammar Challenge X SMK",
+  "description": "Game Grammar Bahasa Inggris interaktif untuk siswa SMK Kelas X (Kurikulum Merdeka), dirancang untuk Interactive Flat Panel, touchscreen, laptop, dan proyektor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

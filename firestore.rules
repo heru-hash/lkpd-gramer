@@ -1,0 +1,87 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'heru@smanike-gresik.sch.id' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin')
+      );
+    }
+
+    function isGuru() {
+      return isSignedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserData().role == 'guru' || getUserData().role == 'admin'))
+      );
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Questions Bank
+    match /questions/{questionId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isGuru();
+    }
+
+    // Grammar Materials
+    match /materials/{materialId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isGuru();
+    }
+
+    // Scores & Game Performance
+    match /scores/{scoreId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (request.resource.data.uid == request.auth.uid || isGuru());
+      allow update, delete: if isGuru();
+    }
+
+    // Leaderboards
+    match /leaderboards/{leaderboardId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && (request.auth.uid == leaderboardId || isGuru());
+      allow delete: if isAdmin();
+    }
+
+    // Classes
+    match /classes/{classId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isGuru();
+    }
+
+    // Realtime Team Battle Session (Interactive Flat Panel)
+    match /battles/{battleId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isGuru();
+    }
+  }
+}

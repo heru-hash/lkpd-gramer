@@ -1,0 +1,139 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based access for Admin, Guru, and Siswa",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "nama": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["admin", "guru", "siswa"] },
+        "kelas": { "type": "string", "maxLength": 50 },
+        "jurusan": { "type": "string", "maxLength": 50 },
+        "nis": { "type": "string", "maxLength": 30 },
+        "nip": { "type": "string", "maxLength": 30 },
+        "mataPelajaran": { "type": "string", "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["uid", "nama", "email", "role"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "Grammar challenge question for Grade X SMK",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 100 },
+        "level": { "type": "number" },
+        "difficulty": { "type": "string", "enum": ["Mudah", "Sedang", "Sulit"] },
+        "question": { "type": "string", "maxLength": 500 },
+        "options": { "type": "array" },
+        "answer": { "type": "string", "maxLength": 300 },
+        "explanation": { "type": "string", "maxLength": 500 },
+        "createdBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "category", "level", "difficulty", "question", "answer"]
+    },
+    "Material": {
+      "title": "Material",
+      "description": "English Grammar learning material module according to Kurikulum Merdeka",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 100 },
+        "tujuan": { "type": "string", "maxLength": 500 },
+        "content": { "type": "string", "maxLength": 5000 },
+        "video": { "type": "string", "maxLength": 300 }
+      },
+      "required": ["id", "title", "content"]
+    },
+    "Score": {
+      "title": "Score",
+      "description": "Student game performance score record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 100 },
+        "kelas": { "type": "string", "maxLength": 50 },
+        "jurusan": { "type": "string", "maxLength": 50 },
+        "level": { "type": "number" },
+        "score": { "type": "number" },
+        "correct": { "type": "number" },
+        "wrong": { "type": "number" },
+        "time": { "type": "number" },
+        "predicate": { "type": "string", "enum": ["A", "B", "C", "D"] }
+      },
+      "required": ["id", "uid", "score", "level"]
+    },
+    "Leaderboard": {
+      "title": "Leaderboard",
+      "description": "Realtime leaderboard entry with badges and ranks",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "nama": { "type": "string", "maxLength": 100 },
+        "kelas": { "type": "string", "maxLength": 50 },
+        "jurusan": { "type": "string", "maxLength": 50 },
+        "totalScore": { "type": "number" },
+        "badge": { "type": "string", "maxLength": 50 },
+        "rank": { "type": "number" }
+      },
+      "required": ["uid", "nama", "totalScore", "badge"]
+    },
+    "Class": {
+      "title": "Class",
+      "description": "SMK Classroom definition",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "namaKelas": { "type": "string", "maxLength": 50 },
+        "jurusan": { "type": "string", "maxLength": 50 },
+        "guru": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "namaKelas", "jurusan"]
+    },
+    "Battle": {
+      "title": "Battle",
+      "description": "Realtime interactive Team Battle session for IFP / Digital Smart Board",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 150 },
+        "status": { "type": "string", "enum": ["waiting", "active", "finished"] }
+      },
+      "required": ["id", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles for siswa, guru, and admin"
+    },
+    "/questions/{questionId}": {
+      "schema": { "$ref": "#/entities/Question" },
+      "description": "Question bank for level 1-6 grammar challenges"
+    },
+    "/materials/{materialId}": {
+      "schema": { "$ref": "#/entities/Material" },
+      "description": "Learning materials with videos and Kurikulum Merdeka objectives"
+    },
+    "/scores/{scoreId}": {
+      "schema": { "$ref": "#/entities/Score" },
+      "description": "Game scores recorded by students"
+    },
+    "/leaderboards/{leaderboardId}": {
+      "schema": { "$ref": "#/entities/Leaderboard" },
+      "description": "Realtime global, school, and class rankings"
+    },
+    "/classes/{classId}": {
+      "schema": { "$ref": "#/entities/Class" },
+      "description": "SMK Classes data"
+    },
+    "/battles/{battleId}": {
+      "schema": { "$ref": "#/entities/Battle" },
+      "description": "Live IFP Team Battle state"
+    }
+  }
+}

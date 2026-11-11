@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+/* High contrast accessibility mode */
+.high-contrast {
+  --bg-main: #050b14;
+  --card-bg: #0d1526;
+  --text-main: #ffffff;
+  --accent-yellow: #ffee00;
+  --accent-cyan: #00f7ff;
+}
+
+/* Pulsing effect for streak multiplier */
+@keyframes streakPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.animate-streak {
+  animation: streakPulse 1.2s infinite ease-in-out;
+}
