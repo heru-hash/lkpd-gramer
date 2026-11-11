@@ -26,7 +26,10 @@ import {
   Smile,
   AlertTriangle,
   UserCog,
-  UserPlus
+  UserPlus,
+  Eye,
+  EyeOff,
+  KeyRound
 } from 'lucide-react';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -73,6 +76,27 @@ export const AdminManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+
+  // Sembunyikan Kredensial Login (Mode Privasi Layar Kelas / IFP)
+  const [hideLoginCredentials, setHideLoginCredentials] = useState<boolean>(() => {
+    return localStorage.getItem('gcs_hide_login_credentials') === 'true';
+  });
+
+  const toggleHideLoginCredentials = () => {
+    triggerHaptic();
+    setHideLoginCredentials(prev => {
+      const next = !prev;
+      localStorage.setItem('gcs_hide_login_credentials', String(next));
+      return next;
+    });
+    setActionSuccessMsg(
+      !hideLoginCredentials 
+        ? 'Privasi aktif: Kredensial login berhasil disembunyikan di halaman login!' 
+        : 'Kredensial login sekarang ditampilkan kembali di halaman login.'
+    );
+    soundManager.playCorrect();
+    setTimeout(() => setActionSuccessMsg(null), 3000);
+  };
 
   // Managed Teachers & Students State (SMKN 1 Sidayu)
   const [teachers, setTeachers] = useState<TeacherItem[]>([
@@ -704,7 +728,21 @@ export const AdminManagement: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleHideLoginCredentials}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-sm ${
+              hideLoginCredentials
+                ? 'bg-rose-950/60 text-rose-300 border-rose-500/50 hover:bg-rose-900/60'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+            }`}
+            title="Sembunyikan atau tampilkan kartu kredensial akun di halaman login untuk privasi"
+          >
+            {hideLoginCredentials ? <EyeOff className="w-3.5 h-3.5 text-rose-400" /> : <Eye className="w-3.5 h-3.5 text-amber-400" />}
+            <span>{hideLoginCredentials ? 'Kredensial Login: Tersembunyi' : 'Kredensial Login: Terlihat'}</span>
+          </button>
+
           <span className="px-3.5 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 text-xs font-black border border-rose-500/30 flex items-center gap-1.5 shadow-sm">
             <ShieldAlert className="w-4 h-4 text-rose-400" />
             Super Admin: {userProfile?.nama || 'Admin Heru'}

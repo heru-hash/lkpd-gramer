@@ -37,6 +37,21 @@ export const AuthPage: React.FC = () => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
+  // Sembunyikan Kredensial (Mode Privasi Kelas / IFP)
+  const [hideCredentials, setHideCredentials] = useState<boolean>(() => {
+    return localStorage.getItem('gcs_hide_login_credentials') === 'true';
+  });
+  const [maskPasswords, setMaskPasswords] = useState<boolean>(false);
+
+  const toggleHideCredentials = () => {
+    triggerHaptic();
+    setHideCredentials(prev => {
+      const next = !prev;
+      localStorage.setItem('gcs_hide_login_credentials', String(next));
+      return next;
+    });
+  };
+
   // Siswa registration form state
   const [siswaForm, setSiswaForm] = useState({
     nama: '',
@@ -92,20 +107,33 @@ export const AuthPage: React.FC = () => {
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (!loginEmail.includes('@') || !loginEmail.includes('.')) {
-      setErrorMessage('Format email tidak valid. Masukkan alamat email yang lengkap.');
+    let email = loginEmail.trim();
+    const pass = loginPassword.trim();
+
+    // Friendly smart aliases so typing 'admin' or 'heru' automatically maps to Super Admin
+    const lower = email.toLowerCase();
+    if (lower === 'admin' || lower === 'administrator' || lower === 'heru' || lower.startsWith('heru@') || lower === 'admin@smkn1sidayu.sch.id') {
+      email = SUPER_ADMIN_EMAIL;
+    } else if (lower === 'guru' || lower === 'bambang' || lower.startsWith('bambang@')) {
+      email = 'bambang.guru@smkn1sidayu.sch.id';
+    } else if (lower === 'siswa' || lower === 'rizky' || lower.startsWith('rizky@')) {
+      email = 'rizky.siswa@smkn1sidayu.sch.id';
+    }
+
+    if (!email.includes('@')) {
+      setErrorMessage('Format email tidak valid. Masukkan alamat email lengkap (contoh: heru@smanike-gresik.sch.id atau username: admin).');
       setLoading(false);
       return;
     }
 
-    if (loginPassword.length < 6) {
-      setErrorMessage('Password minimal 6 karakter.');
+    if (pass.length < 3) {
+      setErrorMessage('Password minimal 3 karakter.');
       setLoading(false);
       return;
     }
 
     try {
-      await login(loginEmail, loginPassword, rememberMe);
+      await login(email, pass, rememberMe);
     } catch (err: any) {
       console.warn('Login error:', err);
       setErrorMessage(formatAuthError(err));
@@ -365,6 +393,126 @@ export const AuthPage: React.FC = () => {
                 </svg>
                 Masuk dengan Akun Google / Akun Belajar.id
               </button>
+
+              {/* Menu Sembunyikan / Tampilkan Kredensial Akun (Mode Aman Layar IFP / Proyektor) */}
+              <div className="mt-4">
+                {hideCredentials ? (
+                  <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2.5 transition">
+                    <div className="flex items-center gap-2 text-xs">
+                      <EyeOff className="w-4 h-4 text-slate-500 shrink-0" />
+                      <span>Bantuan kredensial login disembunyikan (Mode Privasi Layar).</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleHideCredentials}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-400 hover:text-indigo-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer border border-slate-700 active:scale-95"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      Tampilkan Kredensial
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-[11px] space-y-2.5 text-slate-300 transition animate-in fade-in">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/50 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <KeyRound className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span className="font-bold text-white">
+                          Kredensial Akun SMKN 1 Sidayu:
+                        </span>
+                      </div>
+
+                      {/* Menu Kontrol Privasi Kredensial */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => { triggerHaptic(); setMaskPasswords(!maskPasswords); }}
+                          className="px-2.5 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-semibold border border-slate-700 flex items-center gap-1 transition cursor-pointer active:scale-95"
+                          title={maskPasswords ? 'Buka sensor teks password' : 'Bintang-bintangkan teks password'}
+                        >
+                          {maskPasswords ? <Eye className="w-3 h-3 text-amber-400" /> : <EyeOff className="w-3 h-3 text-slate-400" />}
+                          {maskPasswords ? 'Buka Password' : 'Sensor Password'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={toggleHideCredentials}
+                          className="px-2.5 py-1 rounded-xl bg-rose-950/50 hover:bg-rose-900/70 text-rose-300 hover:text-rose-200 text-[10px] font-bold border border-rose-800/60 flex items-center gap-1 transition cursor-pointer active:scale-95"
+                          title="Sembunyikan kotak kredensial ini sepenuhnya"
+                        >
+                          <EyeOff className="w-3 h-3 text-rose-400" />
+                          Sembunyikan Kredensial
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          triggerHaptic();
+                          setLoginEmail('heru@smanike-gresik.sch.id');
+                          setLoginPassword('AdminSMK2026!');
+                          setErrorMessage(null);
+                        }}
+                        className="p-2.5 rounded-xl bg-slate-900 border border-rose-500/40 hover:border-rose-400 hover:bg-slate-800/80 transition text-left cursor-pointer active:scale-95 group"
+                      >
+                        <span className="text-rose-400 font-bold block flex items-center justify-between">
+                          <span>👑 Administrator</span>
+                          <span className="text-[9px] text-rose-300 opacity-0 group-hover:opacity-100 transition">Pilih</span>
+                        </span>
+                        <span className="text-slate-300 block truncate">heru@smanike-gresik.sch.id</span>
+                        <span className="text-slate-400 block font-sans">
+                          Pass: {maskPasswords ? '••••••••••••' : 'AdminSMK2026!'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          triggerHaptic();
+                          setLoginEmail('bambang.guru@smkn1sidayu.sch.id');
+                          setLoginPassword('GuruSMK2026!');
+                          setErrorMessage(null);
+                        }}
+                        className="p-2.5 rounded-xl bg-slate-900 border border-amber-500/40 hover:border-amber-400 hover:bg-slate-800/80 transition text-left cursor-pointer active:scale-95 group"
+                      >
+                        <span className="text-amber-400 font-bold block flex items-center justify-between">
+                          <span>👨‍🏫 Guru Pengampu</span>
+                          <span className="text-[9px] text-amber-300 opacity-0 group-hover:opacity-100 transition">Pilih</span>
+                        </span>
+                        <span className="text-slate-300 block truncate">bambang.guru@smkn1sidayu.sch.id</span>
+                        <span className="text-slate-400 block font-sans">
+                          Pass: {maskPasswords ? '••••••••••••' : 'GuruSMK2026!'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          triggerHaptic();
+                          setLoginEmail('rizky.siswa@smkn1sidayu.sch.id');
+                          setLoginPassword('SiswaSMK2026!');
+                          setErrorMessage(null);
+                        }}
+                        className="p-2.5 rounded-xl bg-slate-900 border border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-800/80 transition text-left cursor-pointer active:scale-95 group"
+                      >
+                        <span className="text-emerald-400 font-bold block flex items-center justify-between">
+                          <span>🎒 Siswa Kelas X</span>
+                          <span className="text-[9px] text-emerald-300 opacity-0 group-hover:opacity-100 transition">Pilih</span>
+                        </span>
+                        <span className="text-slate-300 block truncate">rizky.siswa@smkn1sidayu.sch.id</span>
+                        <span className="text-slate-400 block font-sans">
+                          Pass: {maskPasswords ? '••••••••••••' : 'SiswaSMK2026!'}
+                        </span>
+                      </button>
+                    </div>
+
+                    <p className="text-[10px] text-slate-400 text-center italic">
+                      Tip: Klik salah satu kartu di atas untuk mengisi formulir satu pintu secara otomatis.
+                    </p>
+                  </div>
+                )}
+              </div>
             </form>
           )}
 

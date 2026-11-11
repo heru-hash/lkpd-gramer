@@ -19,7 +19,10 @@ import {
   School,
   Maximize2,
   Minimize2,
-  Play
+  Play,
+  EyeOff,
+  KeyRound,
+  Lock
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useIFP } from '../context/IFPContext';
@@ -44,6 +47,23 @@ export const Pengaturan: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'profil' | 'display' | 'akun'>('profil');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Sembunyikan Kredensial Login (Mode Privasi Layar Kelas / IFP)
+  const [hideLoginCredentials, setHideLoginCredentials] = useState<boolean>(() => {
+    return localStorage.getItem('gcs_hide_login_credentials') === 'true';
+  });
+
+  const toggleHideLoginCredentials = () => {
+    triggerHaptic();
+    setHideLoginCredentials(prev => {
+      const next = !prev;
+      localStorage.setItem('gcs_hide_login_credentials', String(next));
+      return next;
+    });
+    setSaveSuccess(true);
+    soundManager.playCorrect();
+    setTimeout(() => setSaveSuccess(false), 2500);
+  };
 
   // Profile Form State
   const [formData, setFormData] = useState({
@@ -605,6 +625,37 @@ export const Pengaturan: React.FC = () => {
                 }`}
               >
                 {isFullscreen ? 'Keluar Fullscreen' : 'Aktifkan Fullscreen'}
+              </button>
+            </div>
+
+            {/* Sembunyikan Kredensial di Halaman Login */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-800/70 border border-slate-700/60 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 rounded-2xl bg-rose-500/20 text-rose-400">
+                  {hideLoginCredentials ? <EyeOff className="w-6 h-6" /> : <KeyRound className="w-6 h-6" />}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-heading font-bold text-white text-sm sm:text-base">Sembunyikan Kredensial di Halaman Login</p>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-950/80 text-rose-300 border border-rose-800/50">
+                      Privasi Layar
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Sembunyikan kartu bantuan email dan password akun di halaman login untuk mencegah siswa melihat password saat layar proyektor atau IFP menyala.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={toggleHideLoginCredentials}
+                className={`w-14 h-8 rounded-full transition-colors relative p-1 shrink-0 cursor-pointer ${
+                  hideLoginCredentials ? 'bg-rose-500' : 'bg-slate-700'
+                }`}
+                title="Sembunyikan / Tampilkan Kredensial Login"
+              >
+                <div className={`w-6 h-6 rounded-full bg-white transition-transform ${
+                  hideLoginCredentials ? 'translate-x-6' : 'translate-x-0'
+                }`} />
               </button>
             </div>
           </div>
