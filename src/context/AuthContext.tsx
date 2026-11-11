@@ -144,6 +144,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Check if there was an explicitly chosen session
         const storedRole = sessionStorage.getItem('gcs_session_role');
         if (storedRole && storedRole in DEMO_ACCOUNTS) {
+          const savedCustom = sessionStorage.getItem('gcs_custom_demo_profile');
+          if (savedCustom) {
+            try {
+              const parsed = JSON.parse(savedCustom);
+              if (parsed.role === storedRole) {
+                setUserProfile(parsed);
+                setLoading(false);
+                return;
+              }
+            } catch {
+              // fallback to default demo
+            }
+          }
           const profile = DEMO_ACCOUNTS[storedRole as UserRole];
           setUserProfile(profile);
         } else {
@@ -311,11 +324,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = { ...userProfile, ...sanitizedUpdates, updatedAt: new Date().toISOString() };
     setUserProfile(updated);
 
+    // If demo session, cache locally so it stays intact across refreshes
+    if (userProfile.uid.startsWith('demo-')) {
+      sessionStorage.setItem('gcs_custom_demo_profile', JSON.stringify(updated));
+    }
+
+    // If real logged in Firebase user
     if (currentUser?.uid && !currentUser.uid.startsWith('demo-')) {
       try {
         await updateDoc(doc(db, 'users', currentUser.uid), sanitizedUpdates);
       } catch (err) {
         console.warn('Profile update Firestore sync error:', err);
+      }
+
+      // Also update Firebase Auth displayName & photoURL if changed
+      if (sanitizedUpdates.nama || sanitizedUpdates.photoURL) {
+        try {
+          await updateProfile(currentUser, {
+            displayName: sanitizedUpdates.nama || currentUser.displayName,
+            photoURL: sanitizedUpdates.photoURL || currentUser.photoURL,
+          });
+        } catch {
+          // ignore auth profile sync errors
+        }
       }
     }
   };

@@ -11,6 +11,9 @@ export interface UserProfile {
   nip?: string;
   mataPelajaran?: string;
   photoURL?: string;
+  bio?: string;
+  targetScore?: number;
+  avatarId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
