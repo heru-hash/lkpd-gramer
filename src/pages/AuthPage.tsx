@@ -14,24 +14,26 @@ import {
   CheckCircle2,
   AlertCircle,
   KeyRound,
-  Shield
+  Shield,
+  LogIn,
+  UserPlus
 } from 'lucide-react';
 import { useAuth, SUPER_ADMIN_EMAIL } from '../context/AuthContext';
 import { useIFP } from '../context/IFPContext';
-import { UserRole } from '../types';
 
 export const AuthPage: React.FC = () => {
-  const { login, registerSiswa, registerGuru, loginWithGoogle, loginAsDemo } = useAuth();
+  const { login, registerSiswa, registerGuru, loginWithGoogle } = useAuth();
   const { triggerHaptic } = useIFP();
 
-  const [mode, setMode] = useState<'login' | 'reg_siswa' | 'reg_guru'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [registerRole, setRegisterRole] = useState<'siswa' | 'guru'>('siswa');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Login form state
+  // Single door login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
@@ -49,7 +51,7 @@ export const AuthPage: React.FC = () => {
   const [guruForm, setGuruForm] = useState({
     nama: '',
     nip: '',
-    mataPelajaran: 'Bahasa Inggris SMK Kelas X',
+    mataPelajaran: 'Bahasa Inggris SMKN 1 Sidayu Kelas X',
     email: '',
     password: '',
   });
@@ -60,22 +62,22 @@ export const AuthPage: React.FC = () => {
     const code = err?.code || '';
 
     if (code === 'auth/invalid-credential' || msg.includes('invalid-credential')) {
-      return 'Email atau password salah. Pastikan data akun benar, atau gunakan tombol Akses Cepat di bawah.';
+      return 'Email atau password salah. Pastikan data akun yang Anda masukkan benar.';
     }
     if (code === 'auth/user-not-found' || msg.includes('user-not-found')) {
-      return 'Akun belum terdaftar. Silakan daftar pada tab "Daftar Siswa" atau "Daftar Guru".';
+      return 'Akun belum terdaftar. Silakan hubungi Administrator SMKN 1 Sidayu atau daftar akun baru.';
     }
     if (code === 'auth/wrong-password' || msg.includes('wrong-password')) {
       return 'Password yang dimasukkan tidak cocok. Periksa kembali huruf besar/kecil.';
     }
     if (code === 'auth/email-already-in-use' || msg.includes('email-already-in-use')) {
-      return 'Email ini sudah terdaftar. Silakan langsung masuk pada tab "Masuk".';
+      return 'Email ini sudah terdaftar. Silakan langsung masuk pada form login.';
     }
     if (code === 'auth/weak-password' || msg.includes('weak-password')) {
       return 'Password terlalu lemah. Masukkan minimal 6 karakter kombinasi huruf dan angka.';
     }
     if (code === 'auth/invalid-email' || msg.includes('invalid-email')) {
-      return 'Format email tidak valid. Masukkan alamat email yang benar (contoh: nama@smk.sch.id).';
+      return 'Format email tidak valid. Masukkan alamat email yang benar (contoh: nama@smkn1sidayu.sch.id).';
     }
     if (code === 'auth/too-many-requests' || msg.includes('too-many-requests')) {
       return 'Terlalu banyak percobaan gagal. Demi keamanan, akun ditangguhkan sementara. Coba beberapa saat lagi.';
@@ -91,7 +93,7 @@ export const AuthPage: React.FC = () => {
     setSuccessMessage(null);
 
     if (!loginEmail.includes('@') || !loginEmail.includes('.')) {
-      setErrorMessage('Format email tidak valid.');
+      setErrorMessage('Format email tidak valid. Masukkan alamat email yang lengkap.');
       setLoading(false);
       return;
     }
@@ -200,26 +202,9 @@ export const AuthPage: React.FC = () => {
     }
   };
 
-  // Pre-fill test credentials securely for fast IFP touch interaction
-  const handleQuickFill = (role: UserRole) => {
-    triggerHaptic();
-    setMode('login');
-    setErrorMessage(null);
-    if (role === 'admin') {
-      setLoginEmail(SUPER_ADMIN_EMAIL);
-      setLoginPassword('AdminSMK2026!');
-    } else if (role === 'guru') {
-      setLoginEmail('bambang.guru@smkn1sidayu.sch.id');
-      setLoginPassword('GuruSMK2026!');
-    } else {
-      setLoginEmail('rizky.siswa@smkn1sidayu.sch.id');
-      setLoginPassword('SiswaSMK2026!');
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 selection:bg-indigo-500 selection:text-white">
-      {/* Background Decorative Glow */}
+      {/* Background Glow */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl"></div>
         <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl"></div>
@@ -240,44 +225,36 @@ export const AuthPage: React.FC = () => {
               Grammar Challenge X
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 mt-1 font-medium">
-              Portal Pembelajaran Bahasa Inggris Interaktif SMKN 1 Sidayu
+              Pintu Masuk Terpadu (Satu Pintu) untuk Administrator, Guru, dan Siswa
             </p>
           </div>
         </div>
 
         {/* Auth Box Container */}
         <div className="rounded-3xl bg-slate-900/90 border border-slate-800 shadow-2xl p-6 sm:p-8 backdrop-blur-xl space-y-6">
-          {/* Tabs: Login / Daftar Siswa / Daftar Guru */}
-          <div className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-slate-800/90 border border-slate-700">
+          {/* Header Switcher: Login Satu Pintu vs Pendaftaran Akun */}
+          <div className="flex items-center justify-center gap-2 p-1.5 rounded-2xl bg-slate-800/90 border border-slate-700">
             <button
               onClick={() => { triggerHaptic(); setMode('login'); setErrorMessage(null); setSuccessMessage(null); }}
-              className={`py-2.5 rounded-xl font-heading font-bold text-xs sm:text-sm transition-all active:scale-95 touch-manipulation ${
+              className={`flex-1 py-2.5 rounded-xl font-heading font-black text-xs sm:text-sm transition-all flex items-center justify-center gap-2 active:scale-95 touch-manipulation ${
                 mode === 'login'
                   ? 'bg-indigo-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Masuk
+              <LogIn className="w-4 h-4" />
+              Login Satu Pintu (Semua Role)
             </button>
             <button
-              onClick={() => { triggerHaptic(); setMode('reg_siswa'); setErrorMessage(null); setSuccessMessage(null); }}
-              className={`py-2.5 rounded-xl font-heading font-bold text-xs sm:text-sm transition-all active:scale-95 touch-manipulation ${
-                mode === 'reg_siswa'
-                  ? 'bg-emerald-600 text-white shadow-md'
+              onClick={() => { triggerHaptic(); setMode('register'); setErrorMessage(null); setSuccessMessage(null); }}
+              className={`flex-1 py-2.5 rounded-xl font-heading font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 active:scale-95 touch-manipulation ${
+                mode === 'register'
+                  ? 'bg-purple-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              Daftar Siswa
-            </button>
-            <button
-              onClick={() => { triggerHaptic(); setMode('reg_guru'); setErrorMessage(null); setSuccessMessage(null); }}
-              className={`py-2.5 rounded-xl font-heading font-bold text-xs sm:text-sm transition-all active:scale-95 touch-manipulation ${
-                mode === 'reg_guru'
-                  ? 'bg-amber-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Daftar Guru
+              <UserPlus className="w-4 h-4" />
+              Daftar Akun Baru
             </button>
           </div>
 
@@ -296,12 +273,16 @@ export const AuthPage: React.FC = () => {
             </div>
           )}
 
-          {/* FORM 1: LOGIN */}
+          {/* FORM: SATU PINTU LOGIN (UNTUK ADMIN, GURU, DAN SISWA) */}
           {mode === 'login' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div className="p-3 rounded-2xl bg-indigo-950/40 border border-indigo-800/40 text-xs text-indigo-200">
+                <span className="font-bold text-white">Satu Pintu Masuk:</span> Masukkan email dan password akun Anda. Sistem otomatis mengenali hak akses Anda sebagai <span className="text-rose-400 font-bold">Admin</span>, <span className="text-amber-400 font-bold">Guru</span>, atau <span className="text-emerald-400 font-bold">Siswa</span>.
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
-                  Email Akun (Siswa / Guru / Admin)
+                  Email Akun SMKN 1 Sidayu
                 </label>
                 <div className="relative">
                   <Mail className="w-5 h-5 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -310,7 +291,7 @@ export const AuthPage: React.FC = () => {
                     required
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="nama@smkn1sidayu.sch.id"
+                    placeholder="email@smkn1sidayu.sch.id atau email Anda"
                     className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -318,7 +299,7 @@ export const AuthPage: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
-                  Password
+                  Password Keamanan
                 </label>
                 <div className="relative">
                   <Lock className="w-5 h-5 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -327,7 +308,7 @@ export const AuthPage: React.FC = () => {
                     required
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder="Masukkan password Anda..."
                     className="w-full pl-11 pr-12 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                   />
                   <button
@@ -350,20 +331,17 @@ export const AuthPage: React.FC = () => {
                   />
                   <span>Ingat Saya (Sesi Persisten)</span>
                 </label>
-                <span 
-                  onClick={() => handleQuickFill('siswa')}
-                  className="text-indigo-400 cursor-pointer hover:underline"
-                >
-                  Bantuan Akun?
+                <span className="text-slate-500">
+                  SMKN 1 Sidayu Secure Portal
                 </span>
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:brightness-110 text-white font-heading font-black text-sm sm:text-base shadow-xl shadow-indigo-600/30 active:scale-95 transition flex items-center justify-center gap-2 touch-manipulation"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:brightness-110 text-white font-heading font-black text-sm sm:text-base shadow-xl shadow-indigo-600/30 active:scale-95 transition flex items-center justify-center gap-2 touch-manipulation cursor-pointer"
               >
-                {loading ? 'Memverifikasi Kredensial...' : 'Masuk ke Sistem'}
+                {loading ? 'Memverifikasi Kredensial...' : 'Masuk ke Sistem (Satu Pintu)'}
                 <ArrowRight className="w-4 h-4" />
               </button>
 
@@ -377,7 +355,7 @@ export const AuthPage: React.FC = () => {
                 type="button"
                 onClick={handleGoogleLogin}
                 disabled={loading}
-                className="w-full py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 flex items-center justify-center gap-2.5 transition active:scale-95"
+                className="w-full py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 flex items-center justify-center gap-2.5 transition active:scale-95 cursor-pointer"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -390,215 +368,194 @@ export const AuthPage: React.FC = () => {
             </form>
           )}
 
-          {/* FORM 2: REGISTRASI SISWA */}
-          {mode === 'reg_siswa' && (
-            <form onSubmit={handleRegisterSiswaSubmit} className="space-y-3.5 text-xs">
-              <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-emerald-300">
-                Pendaftaran siswa baru Kelas X. Data akan disimpan aman ke Firebase Firestore dengan hak akses khusus Siswa.
+          {/* FORM: PENDAFTARAN AKUN BARU (JIKA DIPERLUKAN) */}
+          {mode === 'register' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRegisterRole('siswa')}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
+                    registerRole === 'siswa'
+                      ? 'bg-emerald-600 text-white border-emerald-400'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  Daftar Sebagai Siswa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRegisterRole('guru')}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
+                    registerRole === 'guru'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-heading font-black'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}
+                >
+                  Daftar Sebagai Guru
+                </button>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap Siswa</label>
-                <input
-                  type="text"
-                  required
-                  value={siswaForm.nama}
-                  onChange={e => setSiswaForm({ ...siswaForm, nama: e.target.value })}
-                  placeholder="Contoh: Muhammad Akbar"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+              {registerRole === 'siswa' ? (
+                <form onSubmit={handleRegisterSiswaSubmit} className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap Siswa</label>
+                    <input
+                      type="text"
+                      required
+                      value={siswaForm.nama}
+                      onChange={e => setSiswaForm({ ...siswaForm, nama: e.target.value })}
+                      placeholder="Contoh: Muhammad Akbar"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-300 uppercase mb-1">NIS (Nomor Induk Siswa)</label>
-                  <input
-                    type="text"
-                    required
-                    value={siswaForm.nis}
-                    onChange={e => setSiswaForm({ ...siswaForm, nis: e.target.value })}
-                    placeholder="232410145"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-300 uppercase mb-1">Kelas</label>
-                  <select
-                    value={siswaForm.kelas}
-                    onChange={e => setSiswaForm({ ...siswaForm, kelas: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">NIS</label>
+                      <input
+                        type="text"
+                        required
+                        value={siswaForm.nis}
+                        onChange={e => setSiswaForm({ ...siswaForm, nis: e.target.value })}
+                        placeholder="232410145"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">Kelas</label>
+                      <select
+                        value={siswaForm.kelas}
+                        onChange={e => setSiswaForm({ ...siswaForm, kelas: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
+                      >
+                        {['X RPL 1', 'X RPL 2', 'X TKJ 1', 'X TKJ 2', 'X AKL 1', 'X AKL 2', 'X Otomotif 1', 'X DPIB 1', 'X Kuliner 1', 'X DKV 1'].map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Jurusan / Konsentrasi Keahlian</label>
+                    <input
+                      type="text"
+                      required
+                      value={siswaForm.jurusan}
+                      onChange={e => setSiswaForm({ ...siswaForm, jurusan: e.target.value })}
+                      placeholder="Contoh: Rekayasa Perangkat Lunak"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Email Siswa SMKN 1 Sidayu</label>
+                    <input
+                      type="email"
+                      required
+                      value={siswaForm.email}
+                      onChange={e => setSiswaForm({ ...siswaForm, email: e.target.value })}
+                      placeholder="siswa@smkn1sidayu.sch.id"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Password Keamanan</label>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      value={siswaForm.password}
+                      onChange={e => setSiswaForm({ ...siswaForm, password: e.target.value })}
+                      placeholder="Minimal 6 karakter"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3.5 mt-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-heading font-black text-sm shadow-xl active:scale-95 transition"
                   >
-                    {['X RPL 1', 'X RPL 2', 'X TKJ 1', 'X TKJ 2', 'X AKL 1', 'X Otomotif 1', 'X DPIB 1'].map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                    {loading ? 'Mendaftarkan Akun Siswa...' : 'Daftar Sebagai Siswa Baru'}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleRegisterGuruSubmit} className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap & Gelar</label>
+                    <input
+                      type="text"
+                      required
+                      value={guruForm.nama}
+                      onChange={e => setGuruForm({ ...guruForm, nama: e.target.value })}
+                      placeholder="Contoh: Budi Santoso, S.Pd."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
 
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Jurusan / Konsentrasi Keahlian</label>
-                <input
-                  type="text"
-                  required
-                  value={siswaForm.jurusan}
-                  onChange={e => setSiswaForm({ ...siswaForm, jurusan: e.target.value })}
-                  placeholder="Contoh: Rekayasa Perangkat Lunak"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">NIP / NUPTK</label>
+                      <input
+                        type="text"
+                        required
+                        value={guruForm.nip}
+                        onChange={e => setGuruForm({ ...guruForm, nip: e.target.value })}
+                        placeholder="19850412 201001 1 008"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">Mata Pelajaran</label>
+                      <input
+                        type="text"
+                        required
+                        value={guruForm.mataPelajaran}
+                        onChange={e => setGuruForm({ ...guruForm, mataPelajaran: e.target.value })}
+                        placeholder="Bahasa Inggris SMKN 1 Sidayu Kelas X"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Email Siswa SMKN 1 Sidayu</label>
-                <input
-                  type="email"
-                  required
-                  value={siswaForm.email}
-                  onChange={e => setSiswaForm({ ...siswaForm, email: e.target.value })}
-                  placeholder="siswa@smkn1sidayu.sch.id"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Email Resmi Guru SMKN 1 Sidayu</label>
+                    <input
+                      type="email"
+                      required
+                      value={guruForm.email}
+                      onChange={e => setGuruForm({ ...guruForm, email: e.target.value })}
+                      placeholder="guru@smkn1sidayu.sch.id"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
 
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Password Keamanan</label>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  minLength={6}
-                  value={siswaForm.password}
-                  onChange={e => setSiswaForm({ ...siswaForm, password: e.target.value })}
-                  placeholder="Minimal 6 karakter"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Password Keamanan</label>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      value={guruForm.password}
+                      onChange={e => setGuruForm({ ...guruForm, password: e.target.value })}
+                      placeholder="Minimal 6 karakter"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 mt-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-heading font-black text-sm shadow-xl active:scale-95 transition"
-              >
-                {loading ? 'Mendaftarkan Akun Siswa...' : 'Daftar Sebagai Siswa Baru'}
-              </button>
-            </form>
-          )}
-
-          {/* FORM 3: REGISTRASI GURU */}
-          {mode === 'reg_guru' && (
-            <form onSubmit={handleRegisterGuruSubmit} className="space-y-3.5 text-xs">
-              <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-800/40 text-amber-300">
-                Pendaftaran guru pengampu Bahasa Inggris SMK. Memiliki wewenang membuat modul, melihat nilai, AI Soal, dan memimpin Team Battle.
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap & Gelar</label>
-                <input
-                  type="text"
-                  required
-                  value={guruForm.nama}
-                  onChange={e => setGuruForm({ ...guruForm, nama: e.target.value })}
-                  placeholder="Contoh: Budi Santoso, S.Pd."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-300 uppercase mb-1">NIP / NUPTK</label>
-                  <input
-                    type="text"
-                    required
-                    value={guruForm.nip}
-                    onChange={e => setGuruForm({ ...guruForm, nip: e.target.value })}
-                    placeholder="19850412 201001 1 008"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-300 uppercase mb-1">Mata Pelajaran</label>
-                  <input
-                    type="text"
-                    required
-                    value={guruForm.mataPelajaran}
-                    onChange={e => setGuruForm({ ...guruForm, mataPelajaran: e.target.value })}
-                    placeholder="Bahasa Inggris SMK Kelas X"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Email Resmi Guru SMKN 1 Sidayu</label>
-                <input
-                  type="email"
-                  required
-                  value={guruForm.email}
-                  onChange={e => setGuruForm({ ...guruForm, email: e.target.value })}
-                  placeholder="guru@smkn1sidayu.sch.id"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Password Keamanan</label>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  minLength={6}
-                  value={guruForm.password}
-                  onChange={e => setGuruForm({ ...guruForm, password: e.target.value })}
-                  placeholder="Minimal 6 karakter"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 mt-2 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-heading font-black text-sm shadow-xl active:scale-95 transition"
-              >
-                {loading ? 'Mendaftarkan Akun Guru...' : 'Daftar Sebagai Guru'}
-              </button>
-            </form>
-          )}
-
-          {/* Quick Demo Access for Interactive Flat Panel (IFP) Testing */}
-          <div className="pt-3 border-t border-slate-800">
-            <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 text-center mb-3">
-              ⚡ Akses Cepat Terverifikasi (Mode Pembelajaran IFP)
-            </p>
-
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => { triggerHaptic(); loginAsDemo('siswa'); }}
-                className="p-3 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition flex flex-col items-center gap-1 active:scale-95 touch-manipulation"
-              >
-                <User className="w-5 h-5 text-emerald-400" />
-                <span>Masuk Siswa</span>
-                <span className="text-[9px] text-slate-400">X RPL 1</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { triggerHaptic(); loginAsDemo('guru'); }}
-                className="p-3 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition flex flex-col items-center gap-1 active:scale-95 touch-manipulation"
-              >
-                <GraduationCap className="w-5 h-5 text-amber-400" />
-                <span>Masuk Guru</span>
-                <span className="text-[9px] text-slate-400">Pengampu</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { triggerHaptic(); loginAsDemo('admin'); }}
-                className="p-3 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition flex flex-col items-center gap-1 active:scale-95 touch-manipulation"
-              >
-                <ShieldCheck className="w-5 h-5 text-rose-400" />
-                <span>Masuk Admin</span>
-                <span className="text-[9px] text-slate-400">Full Access</span>
-              </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3.5 mt-2 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-heading font-black text-sm shadow-xl active:scale-95 transition"
+                  >
+                    {loading ? 'Mendaftarkan Akun Guru...' : 'Daftar Sebagai Guru'}
+                  </button>
+                </form>
+              )}
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

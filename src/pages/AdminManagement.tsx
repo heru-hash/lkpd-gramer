@@ -25,10 +25,11 @@ import {
   ClipboardPaste,
   Smile,
   AlertTriangle,
-  UserCog
+  UserCog,
+  UserPlus
 } from 'lucide-react';
-import { doc, setDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../services/firebase';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useIFP } from '../context/IFPContext';
 import { GRAMMAR_QUESTION_BANK } from '../data/grammarQuestions';
@@ -55,17 +56,25 @@ interface StudentItem {
   email: string;
 }
 
+interface ClassRoomItem {
+  id: string;
+  namaKelas: string;
+  jurusan: string;
+  guru: string;
+  jmlSiswa: number;
+}
+
 export const AdminManagement: React.FC = () => {
   const { userProfile, updateUserBio } = useAuth();
   const { triggerHaptic } = useIFP();
 
-  const [activeTab, setActiveTab] = useState<'users' | 'admin-profile' | 'classes' | 'questions' | 'backup' | 'logs'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'classes' | 'admin-profile' | 'questions' | 'backup' | 'logs'>('users');
   const [userSubTab, setUserSubTab] = useState<'guru' | 'siswa'>('guru');
   const [searchQuery, setSearchQuery] = useState('');
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
-  // Managed Teachers & Students State (Initialized with SMKN 1 Sidayu Data)
+  // Managed Teachers & Students State (SMKN 1 Sidayu)
   const [teachers, setTeachers] = useState<TeacherItem[]>([
     { id: 'g1', nama: 'Bambang Trianto, S.Pd.', nip: '19850412 201001 1 008', mapel: 'Bahasa Inggris SMK Kelas X', kelas: 'X RPL 1, X RPL 2, X TKJ 1', email: 'bambang.guru@smkn1sidayu.sch.id' },
     { id: 'g2', nama: 'Dra. Endang Sulistyo', nip: '19790615 200501 2 004', mapel: 'Bahasa Inggris Kejuruan Bisnis', kelas: 'X AKL 1, X AKL 2, X DPIB 1', email: 'endang.guru@smkn1sidayu.sch.id' },
@@ -84,7 +93,8 @@ export const AdminManagement: React.FC = () => {
     { id: 's8', nama: 'Aulia Rahma Putri', nis: '232410152', kelas: 'X AKL 2', jurusan: 'Akuntansi & Keuangan', email: 'aulia.siswa@smkn1sidayu.sch.id' },
   ]);
 
-  const [classes, setClasses] = useState([
+  // Managed Classes State (Editable by Admin)
+  const [classes, setClasses] = useState<ClassRoomItem[]>([
     { id: 'c1', namaKelas: 'X RPL 1', jurusan: 'Rekayasa Perangkat Lunak', guru: 'Bambang Trianto, S.Pd.', jmlSiswa: 36 },
     { id: 'c2', namaKelas: 'X RPL 2', jurusan: 'Rekayasa Perangkat Lunak', guru: 'Bambang Trianto, S.Pd.', jmlSiswa: 36 },
     { id: 'c3', namaKelas: 'X TKJ 1', jurusan: 'Teknik Komputer & Jaringan', guru: 'Bambang Trianto, S.Pd.', jmlSiswa: 36 },
@@ -96,7 +106,7 @@ export const AdminManagement: React.FC = () => {
     { id: 'c9', namaKelas: 'X DKV 1', jurusan: 'Desain Komunikasi Visual', guru: 'Siti Rahmawati, S.Pd.', jmlSiswa: 34 },
   ]);
 
-  // System logs
+  // System Activity Logs
   const [activityLogs, setActivityLogs] = useState([
     { time: '10:45:12', user: 'Bambang Trianto', action: 'Membuat 5 Soal AI baru pada topik Future Tense SMKN 1 Sidayu' },
     { time: '10:32:05', user: 'Ahmad Rizky Pratama', action: 'Menyelesaikan Level 6 Boss Battle dengan skor 98' },
@@ -105,26 +115,38 @@ export const AdminManagement: React.FC = () => {
     { time: '09:20:44', user: 'Team Battle Arena', action: 'Sesi IFP Tim Biru vs Tim Merah selesai (Pemenang: Tim Biru)' },
   ]);
 
-  // Modals state
+  // Modals state for Users
   const [showManualModal, setShowManualModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [editItem, setEditItem] = useState<{ type: 'guru' | 'siswa'; data: any } | null>(null);
+  const [selectedRoleToCreate, setSelectedRoleToCreate] = useState<'guru' | 'siswa'>('guru');
 
-  // Manual Form States
-  const [manualTeacher, setManualTeacher] = useState({
+  const [editItem, setEditItem] = useState<{
+    id: string;
+    role: 'guru' | 'siswa';
+    nama: string;
+    nipOrNis: string;
+    kelas: string;
+    jurusanOrMapel: string;
+    email: string;
+  } | null>(null);
+
+  // User Manual Form State (Admin selects Role: Guru or Siswa)
+  const [manualUserData, setManualUserData] = useState({
     nama: '',
-    nip: '',
-    mapel: 'Bahasa Inggris SMKN 1 Sidayu Kelas X',
+    nipOrNis: '',
     kelas: 'X RPL 1',
+    jurusanOrMapel: 'Bahasa Inggris SMKN 1 Sidayu Kelas X',
     email: '',
   });
 
-  const [manualStudent, setManualStudent] = useState({
-    nama: '',
-    nis: '',
-    kelas: 'X RPL 1',
+  // Modals state for Classes
+  const [showAddClassModal, setShowAddClassModal] = useState(false);
+  const [editClassItem, setEditClassItem] = useState<ClassRoomItem | null>(null);
+  const [newClassData, setNewClassData] = useState({
+    namaKelas: '',
     jurusan: 'Rekayasa Perangkat Lunak',
-    email: '',
+    guru: 'Bambang Trianto, S.Pd.',
+    jmlSiswa: 36,
   });
 
   // Template Import States
@@ -193,7 +215,7 @@ export const AdminManagement: React.FC = () => {
     soundManager.playCorrect();
   };
 
-  // Parse CSV or Spreadsheet TSV Text
+  // Parse CSV or TSV
   const handleParseText = (text: string, role: 'guru' | 'siswa') => {
     setParseError(null);
     if (!text.trim()) {
@@ -208,7 +230,6 @@ export const AdminManagement: React.FC = () => {
         return;
       }
 
-      // Check if first row is header
       const headerLine = lines[0].toLowerCase();
       const hasHeader = headerLine.includes('nama') || headerLine.includes('nip') || headerLine.includes('nis') || headerLine.includes('email');
       const dataRows = hasHeader ? lines.slice(1) : lines;
@@ -219,7 +240,6 @@ export const AdminManagement: React.FC = () => {
         const line = dataRows[i].trim();
         if (!line) continue;
 
-        // Auto-detect delimiter: tab, comma, semicolon
         let parts: string[] = [];
         if (line.includes('\t')) {
           parts = line.split('\t');
@@ -232,7 +252,6 @@ export const AdminManagement: React.FC = () => {
         parts = parts.map(p => p.trim().replace(/^["']|["']$/g, ''));
 
         if (role === 'guru') {
-          // Columns: Nama, NIP, Mapel, Kelas, Email
           const nama = parts[0] || `Guru Baru ${i + 1}`;
           const nip = parts[1] || '-';
           const mapel = parts[2] || 'Bahasa Inggris SMKN 1 Sidayu';
@@ -248,7 +267,6 @@ export const AdminManagement: React.FC = () => {
             email,
           });
         } else {
-          // Columns: Nama, NIS, Kelas, Jurusan, Email
           const nama = parts[0] || `Siswa Baru ${i + 1}`;
           const nis = parts[1] || String(242510000 + i);
           const kelas = parts[2] || 'X RPL 1';
@@ -276,7 +294,6 @@ export const AdminManagement: React.FC = () => {
     }
   };
 
-  // File Upload Handler for Template
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -290,7 +307,6 @@ export const AdminManagement: React.FC = () => {
     reader.readAsText(file);
   };
 
-  // Save Imported Users to State & Firestore
   const handleCommitTemplateImport = async () => {
     triggerHaptic();
     if (parsedPreview.length === 0) return;
@@ -298,7 +314,6 @@ export const AdminManagement: React.FC = () => {
     try {
       if (templateTargetRole === 'guru') {
         setTeachers(prev => [...prev, ...parsedPreview]);
-        // Sync each to Firestore users collection
         for (const item of parsedPreview) {
           try {
             await setDoc(doc(db, 'users', item.id), {
@@ -313,10 +328,10 @@ export const AdminManagement: React.FC = () => {
               createdAt: new Date().toISOString()
             });
           } catch {
-            // local state retained
+            // retain
           }
         }
-        setActionSuccessMsg(`Berhasil mengimpor ${parsedPreview.length} data Guru SMKN 1 Sidayu dari template!`);
+        setActionSuccessMsg(`Admin berhasil mengimpor ${parsedPreview.length} Role Guru SMKN 1 Sidayu!`);
       } else {
         setStudents(prev => [...prev, ...parsedPreview]);
         for (const item of parsedPreview) {
@@ -333,10 +348,10 @@ export const AdminManagement: React.FC = () => {
               createdAt: new Date().toISOString()
             });
           } catch {
-            // local state retained
+            // retain
           }
         }
-        setActionSuccessMsg(`Berhasil mengimpor ${parsedPreview.length} data Siswa SMKN 1 Sidayu dari template!`);
+        setActionSuccessMsg(`Admin berhasil mengimpor ${parsedPreview.length} Role Siswa SMKN 1 Sidayu!`);
       }
 
       setActivityLogs(prev => [
@@ -356,32 +371,36 @@ export const AdminManagement: React.FC = () => {
     }
   };
 
-  // Manual Add Handlers
-  const handleAddManualSubmit = async (e: React.FormEvent) => {
+  // ADMIN CREATES ROLE (GURU OR SISWA)
+  const handleAdminCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     triggerHaptic();
 
-    if (userSubTab === 'guru') {
+    const newId = `${selectedRoleToCreate === 'guru' ? 'g' : 's'}-${Date.now()}`;
+    const cleanName = manualUserData.nama.trim();
+    const cleanEmail = manualUserData.email.trim() || `${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '.')}@smkn1sidayu.sch.id`;
+
+    if (selectedRoleToCreate === 'guru') {
       const newTeacher: TeacherItem = {
-        id: `g-man-${Date.now()}`,
-        nama: manualTeacher.nama.trim(),
-        nip: manualTeacher.nip.trim(),
-        mapel: manualTeacher.mapel.trim(),
-        kelas: manualTeacher.kelas.trim(),
-        email: manualTeacher.email.trim() || `${manualTeacher.nama.toLowerCase().replace(/[^a-z0-9]/g, '.')}@smkn1sidayu.sch.id`,
+        id: newId,
+        nama: cleanName,
+        nip: manualUserData.nipOrNis.trim(),
+        mapel: manualUserData.jurusanOrMapel.trim(),
+        kelas: manualUserData.kelas.trim(),
+        email: cleanEmail,
       };
 
       setTeachers(prev => [newTeacher, ...prev]);
 
       try {
-        await setDoc(doc(db, 'users', newTeacher.id), {
-          uid: newTeacher.id,
-          nama: newTeacher.nama,
-          email: newTeacher.email,
+        await setDoc(doc(db, 'users', newId), {
+          uid: newId,
+          nama: cleanName,
+          email: cleanEmail,
           role: 'guru',
-          nip: newTeacher.nip,
-          mataPelajaran: newTeacher.mapel,
-          kelas: newTeacher.kelas,
+          nip: manualUserData.nipOrNis.trim(),
+          mataPelajaran: manualUserData.jurusanOrMapel.trim(),
+          kelas: manualUserData.kelas.trim(),
           sekolah: 'SMKN 1 Sidayu',
           createdAt: new Date().toISOString()
         });
@@ -389,29 +408,28 @@ export const AdminManagement: React.FC = () => {
         console.warn('Sync firestore:', err);
       }
 
-      setActionSuccessMsg(`Guru baru "${newTeacher.nama}" berhasil ditambahkan ke SMKN 1 Sidayu!`);
-      setManualTeacher({ nama: '', nip: '', mapel: 'Bahasa Inggris SMKN 1 Sidayu Kelas X', kelas: 'X RPL 1', email: '' });
+      setActionSuccessMsg(`Role GURU berhasil dibuat: "${cleanName}" terdaftar sebagai pengampu di SMKN 1 Sidayu!`);
     } else {
       const newStudent: StudentItem = {
-        id: `s-man-${Date.now()}`,
-        nama: manualStudent.nama.trim(),
-        nis: manualStudent.nis.trim(),
-        kelas: manualStudent.kelas,
-        jurusan: manualStudent.jurusan.trim(),
-        email: manualStudent.email.trim() || `${manualStudent.nama.toLowerCase().replace(/[^a-z0-9]/g, '.')}@smkn1sidayu.sch.id`,
+        id: newId,
+        nama: cleanName,
+        nis: manualUserData.nipOrNis.trim(),
+        kelas: manualUserData.kelas,
+        jurusan: manualUserData.jurusanOrMapel.trim(),
+        email: cleanEmail,
       };
 
       setStudents(prev => [newStudent, ...prev]);
 
       try {
-        await setDoc(doc(db, 'users', newStudent.id), {
-          uid: newStudent.id,
-          nama: newStudent.nama,
-          email: newStudent.email,
+        await setDoc(doc(db, 'users', newId), {
+          uid: newId,
+          nama: cleanName,
+          email: cleanEmail,
           role: 'siswa',
-          nis: newStudent.nis,
-          kelas: newStudent.kelas,
-          jurusan: newStudent.jurusan,
+          nis: manualUserData.nipOrNis.trim(),
+          kelas: manualUserData.kelas,
+          jurusan: manualUserData.jurusanOrMapel.trim(),
           sekolah: 'SMKN 1 Sidayu',
           createdAt: new Date().toISOString()
         });
@@ -419,9 +437,16 @@ export const AdminManagement: React.FC = () => {
         console.warn('Sync firestore:', err);
       }
 
-      setActionSuccessMsg(`Siswa baru "${newStudent.nama}" berhasil didaftarkan ke kelas ${newStudent.kelas}!`);
-      setManualStudent({ nama: '', nis: '', kelas: 'X RPL 1', jurusan: 'Rekayasa Perangkat Lunak', email: '' });
+      setActionSuccessMsg(`Role SISWA berhasil dibuat: "${cleanName}" terdaftar di kelas ${manualUserData.kelas}!`);
     }
+
+    setManualUserData({
+      nama: '',
+      nipOrNis: '',
+      kelas: 'X RPL 1',
+      jurusanOrMapel: selectedRoleToCreate === 'guru' ? 'Bahasa Inggris SMKN 1 Sidayu Kelas X' : 'Rekayasa Perangkat Lunak',
+      email: '',
+    });
 
     setShowManualModal(false);
     soundManager.playCorrect();
@@ -430,18 +455,66 @@ export const AdminManagement: React.FC = () => {
     setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
-  // Edit User Handler
-  const handleSaveEditUser = (e: React.FormEvent) => {
+  // EDIT USER HANDLER (ADMIN CAN ADJUST DETAILS & ROLE)
+  const handleSaveEditUser = async (e: React.FormEvent) => {
     e.preventDefault();
     triggerHaptic();
     if (!editItem) return;
 
-    if (editItem.type === 'guru') {
-      setTeachers(prev => prev.map(t => t.id === editItem.data.id ? editItem.data : t));
-      setActionSuccessMsg(`Data Guru "${editItem.data.nama}" berhasil diperbarui!`);
+    if (editItem.role === 'guru') {
+      const updatedTeacher: TeacherItem = {
+        id: editItem.id,
+        nama: editItem.nama.trim(),
+        nip: editItem.nipOrNis.trim(),
+        mapel: editItem.jurusanOrMapel.trim(),
+        kelas: editItem.kelas.trim(),
+        email: editItem.email.trim(),
+      };
+      setTeachers(prev => prev.map(t => t.id === editItem.id ? updatedTeacher : t));
+      setActionSuccessMsg(`Data Guru "${updatedTeacher.nama}" berhasil diperbarui!`);
+
+      try {
+        await setDoc(doc(db, 'users', editItem.id), {
+          uid: editItem.id,
+          nama: updatedTeacher.nama,
+          nip: updatedTeacher.nip,
+          mataPelajaran: updatedTeacher.mapel,
+          kelas: updatedTeacher.kelas,
+          email: updatedTeacher.email,
+          role: 'guru',
+          sekolah: 'SMKN 1 Sidayu',
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch {
+        // retain
+      }
     } else {
-      setStudents(prev => prev.map(s => s.id === editItem.data.id ? editItem.data : s));
-      setActionSuccessMsg(`Data Siswa "${editItem.data.nama}" berhasil diperbarui!`);
+      const updatedStudent: StudentItem = {
+        id: editItem.id,
+        nama: editItem.nama.trim(),
+        nis: editItem.nipOrNis.trim(),
+        kelas: editItem.kelas,
+        jurusan: editItem.jurusanOrMapel.trim(),
+        email: editItem.email.trim(),
+      };
+      setStudents(prev => prev.map(s => s.id === editItem.id ? updatedStudent : s));
+      setActionSuccessMsg(`Data Siswa "${updatedStudent.nama}" berhasil diperbarui!`);
+
+      try {
+        await setDoc(doc(db, 'users', editItem.id), {
+          uid: editItem.id,
+          nama: updatedStudent.nama,
+          nis: updatedStudent.nis,
+          kelas: updatedStudent.kelas,
+          jurusan: updatedStudent.jurusan,
+          email: updatedStudent.email,
+          role: 'siswa',
+          sekolah: 'SMKN 1 Sidayu',
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch {
+        // retain
+      }
     }
 
     setEditItem(null);
@@ -449,7 +522,7 @@ export const AdminManagement: React.FC = () => {
     setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
-  // Delete User
+  // DELETE USER
   const handleDeleteUser = (type: 'guru' | 'siswa', id: string, name: string) => {
     triggerHaptic();
     if (confirm(`Apakah Anda yakin ingin menghapus data ${type === 'guru' ? 'Guru' : 'Siswa'} "${name}"?`)) {
@@ -458,13 +531,85 @@ export const AdminManagement: React.FC = () => {
       } else {
         setStudents(prev => prev.filter(s => s.id !== id));
       }
+
+      try {
+        deleteDoc(doc(db, 'users', id));
+      } catch {
+        // retain
+      }
+
       soundManager.playWrong();
       setActionSuccessMsg(`Data "${name}" berhasil dihapus.`);
       setTimeout(() => setActionSuccessMsg(null), 3000);
     }
   };
 
-  // Save Admin Profile
+  // CLASSROOM CRUD HANDLERS (KELOLA KELAS BISA DIEDIT)
+  const handleAddClassSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    triggerHaptic();
+
+    const newClassId = `c-${Date.now()}`;
+    const item: ClassRoomItem = {
+      id: newClassId,
+      namaKelas: newClassData.namaKelas.trim(),
+      jurusan: newClassData.jurusan.trim(),
+      guru: newClassData.guru.trim(),
+      jmlSiswa: Number(newClassData.jmlSiswa) || 36,
+    };
+
+    setClasses(prev => [...prev, item]);
+
+    try {
+      await setDoc(doc(db, 'classes', newClassId), item);
+    } catch (err) {
+      console.warn('Class sync:', err);
+    }
+
+    setShowAddClassModal(false);
+    setNewClassData({ namaKelas: '', jurusan: 'Rekayasa Perangkat Lunak', guru: 'Bambang Trianto, S.Pd.', jmlSiswa: 36 });
+    setActionSuccessMsg(`Kelas baru "${item.namaKelas}" berhasil ditambahkan ke SMKN 1 Sidayu!`);
+    soundManager.playCorrect();
+    triggerConfetti();
+
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleSaveEditClassSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    triggerHaptic();
+    if (!editClassItem) return;
+
+    setClasses(prev => prev.map(c => c.id === editClassItem.id ? editClassItem : c));
+
+    try {
+      await setDoc(doc(db, 'classes', editClassItem.id), editClassItem, { merge: true });
+    } catch (err) {
+      console.warn('Class sync edit:', err);
+    }
+
+    setActionSuccessMsg(`Rombel Kelas "${editClassItem.namaKelas}" berhasil diperbarui!`);
+    setEditClassItem(null);
+    soundManager.playCorrect();
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  const handleDeleteClass = async (id: string, name: string) => {
+    triggerHaptic();
+    if (confirm(`Hapus rombongan belajar kelas "${name}"?`)) {
+      setClasses(prev => prev.filter(c => c.id !== id));
+      try {
+        await deleteDoc(doc(db, 'classes', id));
+      } catch {
+        // retain
+      }
+      soundManager.playWrong();
+      setActionSuccessMsg(`Kelas "${name}" berhasil dihapus.`);
+      setTimeout(() => setActionSuccessMsg(null), 3000);
+    }
+  };
+
+  // ADMIN PROFILE SAVE
   const handleSaveAdminProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     triggerHaptic();
@@ -485,12 +630,12 @@ export const AdminManagement: React.FC = () => {
     setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
-  // Backup Data Trigger
+  // BACKUP DATA
   const handleBackup = () => {
     triggerHaptic();
     const backupPayload = {
       appName: 'Grammar Challenge X - SMKN 1 Sidayu',
-      version: '2.5.0',
+      version: '2.6.0',
       timestamp: new Date().toISOString(),
       school: 'SMKN 1 Sidayu (Gresik)',
       exportedBy: userProfile?.email || 'heru@smanike-gresik.sch.id',
@@ -517,7 +662,6 @@ export const AdminManagement: React.FC = () => {
     triggerConfetti();
   };
 
-  // Restore Data Simulation
   const handleRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
     triggerHaptic();
     const file = e.target.files?.[0];
@@ -553,10 +697,10 @@ export const AdminManagement: React.FC = () => {
             SMKN 1 Sidayu • Panel Khusus Administrator
           </div>
           <h1 className="font-heading font-black text-2xl sm:text-3xl text-white tracking-tight">
-            Manajemen Pengguna & Kontrol Sistem SMKN 1 Sidayu
+            Pusat Kontrol & Manajemen Sistem SMKN 1 Sidayu
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Kelola data guru & siswa (input template CSV/Excel & manual), edit profil admin, rombel kelas, bank soal, dan cadangan data.
+            Buat role Guru & Siswa, kelola rombel kelas kejuruan (bisa diedit), edit profil admin, bank soal, dan cadangan data.
           </p>
         </div>
 
@@ -579,9 +723,9 @@ export const AdminManagement: React.FC = () => {
       {/* Admin Tab Navigation */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         {[
-          { id: 'users', label: 'Kelola Guru & Siswa', icon: Users },
-          { id: 'admin-profile', label: 'Edit Profil Admin', icon: UserCog, highlight: true },
-          { id: 'classes', label: 'Kelola Kelas Kejuruan', icon: GraduationCap },
+          { id: 'users', label: 'Kelola Role Guru & Siswa', icon: Users },
+          { id: 'classes', label: 'Kelola Kelas Kejuruan (Bisa Diedit)', icon: GraduationCap, highlight: true },
+          { id: 'admin-profile', label: 'Edit Profil Admin', icon: UserCog },
           { id: 'questions', label: 'Monitoring Bank Soal (300+)', icon: Layers },
           { id: 'backup', label: 'Backup & Restore Data', icon: Database },
           { id: 'logs', label: 'Log Aktivitas Sistem', icon: Activity },
@@ -607,7 +751,7 @@ export const AdminManagement: React.FC = () => {
         })}
       </div>
 
-      {/* TAB 1: KELOLA GURU & SISWA */}
+      {/* TAB 1: KELOLA ROLE GURU & SISWA */}
       {activeTab === 'users' && (
         <div className="space-y-6">
           {/* Action Toolbar */}
@@ -623,7 +767,7 @@ export const AdminManagement: React.FC = () => {
                 }`}
               >
                 <GraduationCap className="w-4 h-4" />
-                Data Guru Pengampu ({teachers.length})
+                Role Guru Pengampu ({teachers.length})
               </button>
               <button
                 onClick={() => { triggerHaptic(); setUserSubTab('siswa'); }}
@@ -634,11 +778,11 @@ export const AdminManagement: React.FC = () => {
                 }`}
               >
                 <Users className="w-4 h-4" />
-                Data Siswa Kelas X ({students.length})
+                Role Siswa Kelas X ({students.length})
               </button>
             </div>
 
-            {/* Action Buttons: Input Template & Input Manual */}
+            {/* Action Buttons: Buat Role Baru & Input Template */}
             <div className="flex flex-wrap items-center gap-2.5">
               <button
                 onClick={() => {
@@ -658,12 +802,20 @@ export const AdminManagement: React.FC = () => {
               <button
                 onClick={() => {
                   triggerHaptic();
+                  setSelectedRoleToCreate(userSubTab);
+                  setManualUserData({
+                    nama: '',
+                    nipOrNis: '',
+                    kelas: 'X RPL 1',
+                    jurusanOrMapel: userSubTab === 'guru' ? 'Bahasa Inggris SMKN 1 Sidayu Kelas X' : 'Rekayasa Perangkat Lunak',
+                    email: '',
+                  });
                   setShowManualModal(true);
                 }}
                 className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:brightness-110 text-slate-950 font-heading font-black text-xs sm:text-sm shadow-md shadow-amber-500/20 flex items-center gap-2 active:scale-95 transition"
               >
-                <Plus className="w-4 h-4" />
-                Tambah Manual {userSubTab === 'guru' ? 'Guru' : 'Siswa'}
+                <UserPlus className="w-4 h-4" />
+                Buat User Baru (Pilih Role Guru / Siswa)
               </button>
             </div>
           </div>
@@ -686,7 +838,7 @@ export const AdminManagement: React.FC = () => {
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <h3 className="font-heading font-bold text-white text-base flex items-center gap-2">
                   <GraduationCap className="w-5 h-5 text-amber-400" />
-                  Daftar Guru Pengampu SMKN 1 Sidayu ({filteredTeachers.length} Guru)
+                  Daftar Pengguna Role Guru SMKN 1 Sidayu ({filteredTeachers.length} Guru)
                 </h3>
                 <button
                   onClick={() => handleDownloadTemplate('guru')}
@@ -704,7 +856,7 @@ export const AdminManagement: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <p className="font-heading font-black text-white text-base">{g.nama}</p>
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                          Guru Aktif
+                          Role: Guru
                         </span>
                       </div>
                       <p className="text-xs text-slate-400">
@@ -721,9 +873,20 @@ export const AdminManagement: React.FC = () => {
                       </span>
 
                       <button
-                        onClick={() => { triggerHaptic(); setEditItem({ type: 'guru', data: { ...g } }); }}
+                        onClick={() => {
+                          triggerHaptic();
+                          setEditItem({
+                            id: g.id,
+                            role: 'guru',
+                            nama: g.nama,
+                            nipOrNis: g.nip,
+                            kelas: g.kelas,
+                            jurusanOrMapel: g.mapel,
+                            email: g.email,
+                          });
+                        }}
                         className="p-2 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white transition active:scale-95"
-                        title="Edit Data Guru"
+                        title="Edit Data & Role Guru"
                       >
                         <Edit3 className="w-4 h-4 text-amber-400" />
                       </button>
@@ -731,19 +894,13 @@ export const AdminManagement: React.FC = () => {
                       <button
                         onClick={() => handleDeleteUser('guru', g.id, g.nama)}
                         className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition active:scale-95"
-                        title="Hapus Data Guru"
+                        title="Hapus Guru"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
                 ))}
-
-                {filteredTeachers.length === 0 && (
-                  <p className="text-center py-8 text-xs text-slate-500">
-                    Tidak ada data guru yang cocok dengan pencarian.
-                  </p>
-                )}
               </div>
             </div>
           )}
@@ -754,7 +911,7 @@ export const AdminManagement: React.FC = () => {
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <h3 className="font-heading font-bold text-white text-base flex items-center gap-2">
                   <Users className="w-5 h-5 text-emerald-400" />
-                  Daftar Siswa Kelas X SMKN 1 Sidayu ({filteredStudents.length} Siswa Terdaftar)
+                  Daftar Pengguna Role Siswa SMKN 1 Sidayu ({filteredStudents.length} Siswa Terdaftar)
                 </h3>
                 <button
                   onClick={() => handleDownloadTemplate('siswa')}
@@ -772,7 +929,7 @@ export const AdminManagement: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <p className="font-heading font-black text-white text-base">{s.nama}</p>
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          {s.kelas}
+                          Role: Siswa • {s.kelas}
                         </span>
                       </div>
                       <p className="text-xs text-slate-400">
@@ -785,9 +942,20 @@ export const AdminManagement: React.FC = () => {
 
                     <div className="flex items-center gap-2.5">
                       <button
-                        onClick={() => { triggerHaptic(); setEditItem({ type: 'siswa', data: { ...s } }); }}
+                        onClick={() => {
+                          triggerHaptic();
+                          setEditItem({
+                            id: s.id,
+                            role: 'siswa',
+                            nama: s.nama,
+                            nipOrNis: s.nis,
+                            kelas: s.kelas,
+                            jurusanOrMapel: s.jurusan,
+                            email: s.email,
+                          });
+                        }}
                         className="p-2 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white transition active:scale-95"
-                        title="Edit Data Siswa"
+                        title="Edit Data & Role Siswa"
                       >
                         <Edit3 className="w-4 h-4 text-emerald-400" />
                       </button>
@@ -795,26 +963,91 @@ export const AdminManagement: React.FC = () => {
                       <button
                         onClick={() => handleDeleteUser('siswa', s.id, s.nama)}
                         className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition active:scale-95"
-                        title="Hapus Data Siswa"
+                        title="Hapus Siswa"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
                 ))}
-
-                {filteredStudents.length === 0 && (
-                  <p className="text-center py-8 text-xs text-slate-500">
-                    Tidak ada data siswa yang cocok dengan pencarian.
-                  </p>
-                )}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* TAB 2: EDIT PROFIL ADMIN JUGA */}
+      {/* TAB 2: KELOLA KELAS KEJURUAN (BISA DIEDIT) */}
+      {activeTab === 'classes' && (
+        <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+            <div>
+              <h3 className="font-heading font-black text-xl text-white flex items-center gap-2">
+                <GraduationCap className="w-6 h-6 text-indigo-400" />
+                Kelola Rombongan Belajar (Rombel) SMKN 1 Sidayu
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Admin dapat menambah, mengedit nama kelas, jurusan, guru wali, dan jumlah siswa secara real-time.
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                triggerHaptic();
+                setShowAddClassModal(true);
+              }}
+              className="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-heading font-black text-xs sm:text-sm shadow-lg shadow-indigo-600/30 flex items-center gap-2 self-start sm:self-auto active:scale-95 transition"
+            >
+              <Plus className="w-4 h-4" />
+              Tambah Kelas Baru
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {classes.map(c => (
+              <div key={c.id} className="p-5 rounded-2xl bg-slate-800/80 border border-slate-700/60 space-y-3 hover:border-indigo-500/50 transition shadow-md">
+                <div className="flex items-center justify-between">
+                  <span className="font-heading font-black text-white text-lg">{c.namaKelas}</span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    {c.jmlSiswa} Siswa
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-300 font-medium">
+                    <span className="text-slate-500">Jurusan: </span>{c.jurusan}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    <span className="text-slate-500">Guru Wali: </span>{c.guru}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-700/60">
+                  <button
+                    onClick={() => {
+                      triggerHaptic();
+                      setEditClassItem({ ...c });
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition active:scale-95"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                    Edit Kelas
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteClass(c.id, c.namaKelas)}
+                    className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition active:scale-95"
+                    title="Hapus Kelas"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: EDIT PROFIL ADMIN */}
       {activeTab === 'admin-profile' && (
         <div className="max-w-3xl mx-auto space-y-6">
           <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl flex items-center justify-between">
@@ -833,7 +1066,6 @@ export const AdminManagement: React.FC = () => {
           </div>
 
           <form onSubmit={handleSaveAdminProfile} className="p-6 sm:p-8 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-6">
-            {/* Avatar Selector */}
             <div className="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/60 space-y-3">
               <label className="block text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center gap-1.5">
                 <Smile className="w-4 h-4 text-amber-400" />
@@ -879,7 +1111,6 @@ export const AdminManagement: React.FC = () => {
               </div>
             </div>
 
-            {/* Inputs Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <label className="block text-xs font-bold text-slate-200 uppercase tracking-wide mb-1.5">
@@ -943,9 +1174,6 @@ export const AdminManagement: React.FC = () => {
                   value={adminProfileForm.email}
                   className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-slate-700 text-sm text-slate-400 font-mono cursor-not-allowed"
                 />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Email super admin terhubung dengan hak akses penuh sistem sekolah.
-                </p>
               </div>
 
               <div className="sm:col-span-2">
@@ -972,40 +1200,6 @@ export const AdminManagement: React.FC = () => {
               </button>
             </div>
           </form>
-        </div>
-      )}
-
-      {/* TAB 3: KELOLA KELAS KEJURUAN */}
-      {activeTab === 'classes' && (
-        <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-            <div>
-              <h3 className="font-heading font-bold text-white text-base flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-indigo-400" />
-                Daftar Rombongan Belajar (Rombel) Kelas X SMKN 1 Sidayu
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Rombel terdaftar dalam Fase E Kurikulum Merdeka Kejuruan.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {classes.map(c => (
-              <div key={c.id} className="p-5 rounded-2xl bg-slate-800/80 border border-slate-700/60 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-heading font-black text-white text-lg">{c.namaKelas}</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300">
-                    {c.jmlSiswa} Siswa
-                  </span>
-                </div>
-                <p className="text-xs text-slate-300 font-medium">{c.jurusan}</p>
-                <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-700">
-                  Guru Wali / Pengampu: {c.guru}
-                </p>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
@@ -1062,7 +1256,6 @@ export const AdminManagement: React.FC = () => {
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {/* Backup Box */}
             <div className="p-6 rounded-3xl bg-slate-800/70 border border-slate-700 space-y-4 text-center">
               <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
                 <Download className="w-7 h-7" />
@@ -1079,7 +1272,6 @@ export const AdminManagement: React.FC = () => {
               </button>
             </div>
 
-            {/* Restore Box */}
             <div className="p-6 rounded-3xl bg-slate-800/70 border border-slate-700 space-y-4 text-center">
               <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                 <Upload className="w-7 h-7" />
@@ -1129,7 +1321,452 @@ export const AdminManagement: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL 1: INPUT DARI TEMPLATE CSV/EXCEL / SALIN-TEMPEL */}
+      {/* MODAL: ADMIN BUAT USER BARU DENGAN PILIHAN ROLE (GURU ATAU SISWA) */}
+      {showManualModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-heading font-black text-lg sm:text-xl text-white flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-amber-400" />
+                  Buat Pengguna Baru (Role Guru / Siswa)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Admin dapat menetapkan peran secara langsung untuk warga sekolah SMKN 1 Sidayu.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowManualModal(false)}
+                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminCreateUserSubmit} className="space-y-4 text-xs">
+              {/* Role Selection Tabs */}
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1.5">
+                  Pilih Peran Akun (Role) *
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-800 border border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedRoleToCreate('guru');
+                      setManualUserData(prev => ({
+                        ...prev,
+                        jurusanOrMapel: 'Bahasa Inggris SMKN 1 Sidayu Kelas X'
+                      }));
+                    }}
+                    className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition ${
+                      selectedRoleToCreate === 'guru'
+                        ? 'bg-amber-500 text-slate-950 shadow-md font-heading font-black'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <GraduationCap className="w-4 h-4" />
+                    Role Guru
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedRoleToCreate('siswa');
+                      setManualUserData(prev => ({
+                        ...prev,
+                        jurusanOrMapel: 'Rekayasa Perangkat Lunak'
+                      }));
+                    }}
+                    className={`py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition ${
+                      selectedRoleToCreate === 'siswa'
+                        ? 'bg-emerald-500 text-slate-950 shadow-md font-heading font-black'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    Role Siswa
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">
+                  Nama Lengkap & Gelar *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={manualUserData.nama}
+                  onChange={e => setManualUserData({ ...manualUserData, nama: e.target.value })}
+                  placeholder={selectedRoleToCreate === 'guru' ? 'Contoh: Bambang Trianto, S.Pd.' : 'Contoh: Ahmad Dimas Pratama'}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">
+                    {selectedRoleToCreate === 'guru' ? 'NIP / NUPTK' : 'NIS (Nomor Induk Siswa)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={manualUserData.nipOrNis}
+                    onChange={e => setManualUserData({ ...manualUserData, nipOrNis: e.target.value })}
+                    placeholder={selectedRoleToCreate === 'guru' ? '19850412 201001 1 008' : '24251001'}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">
+                    {selectedRoleToCreate === 'guru' ? 'Kelas Binaan' : 'Kelas Kejuruan *'}
+                  </label>
+                  {selectedRoleToCreate === 'guru' ? (
+                    <input
+                      type="text"
+                      value={manualUserData.kelas}
+                      onChange={e => setManualUserData({ ...manualUserData, kelas: e.target.value })}
+                      placeholder="X RPL 1, X TKJ 1"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                    />
+                  ) : (
+                    <select
+                      value={manualUserData.kelas}
+                      onChange={e => setManualUserData({ ...manualUserData, kelas: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
+                    >
+                      {classes.map(c => (
+                        <option key={c.id} value={c.namaKelas}>{c.namaKelas}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">
+                  {selectedRoleToCreate === 'guru' ? 'Mata Pelajaran yang Diampu' : 'Jurusan / Konsentrasi Keahlian'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={manualUserData.jurusanOrMapel}
+                  onChange={e => setManualUserData({ ...manualUserData, jurusanOrMapel: e.target.value })}
+                  placeholder={selectedRoleToCreate === 'guru' ? 'Bahasa Inggris SMKN 1 Sidayu Kelas X' : 'Rekayasa Perangkat Lunak'}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">
+                  Email Akun Resmi SMKN 1 Sidayu
+                </label>
+                <input
+                  type="email"
+                  value={manualUserData.email}
+                  onChange={e => setManualUserData({ ...manualUserData, email: e.target.value })}
+                  placeholder={selectedRoleToCreate === 'guru' ? 'guru@smkn1sidayu.sch.id' : 'siswa@smkn1sidayu.sch.id'}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowManualModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-heading font-black shadow-lg shadow-amber-500/20 active:scale-95 transition"
+                >
+                  Buat Akun ({selectedRoleToCreate.toUpperCase()})
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT USER (TERMASUK EDIT ROLE GURU/SISWA) */}
+      {editItem && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-heading font-black text-lg text-white flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-indigo-400" />
+                Edit Data & Role Pengguna
+              </h3>
+              <button
+                onClick={() => setEditItem(null)}
+                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Role Akun</label>
+                <select
+                  value={editItem.role}
+                  onChange={e => setEditItem({ ...editItem, role: e.target.value as 'guru' | 'siswa' })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-bold focus:outline-none focus:border-indigo-400"
+                >
+                  <option value="guru">Guru Pengampu</option>
+                  <option value="siswa">Siswa Kelas X</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap</label>
+                <input
+                  type="text"
+                  required
+                  value={editItem.nama}
+                  onChange={e => setEditItem({ ...editItem, nama: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">
+                    {editItem.role === 'guru' ? 'NIP / NUPTK' : 'NIS'}
+                  </label>
+                  <input
+                    type="text"
+                    value={editItem.nipOrNis}
+                    onChange={e => setEditItem({ ...editItem, nipOrNis: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">Kelas</label>
+                  <input
+                    type="text"
+                    value={editItem.kelas}
+                    onChange={e => setEditItem({ ...editItem, kelas: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">
+                  {editItem.role === 'guru' ? 'Mata Pelajaran' : 'Jurusan'}
+                </label>
+                <input
+                  type="text"
+                  value={editItem.jurusanOrMapel}
+                  onChange={e => setEditItem({ ...editItem, jurusanOrMapel: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editItem.email}
+                  onChange={e => setEditItem({ ...editItem, email: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditItem(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-heading font-black shadow-lg shadow-indigo-600/20 active:scale-95"
+                >
+                  Simpan Perubahan User
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TAMBAH KELAS KEJURUAN BARU (BISA DIEDIT) */}
+      {showAddClassModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-heading font-black text-lg text-white flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-indigo-400" />
+                Tambah Rombel Kelas Kejuruan Baru
+              </h3>
+              <button
+                onClick={() => setShowAddClassModal(false)}
+                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddClassSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Nama Rombel Kelas *</label>
+                <input
+                  type="text"
+                  required
+                  value={newClassData.namaKelas}
+                  onChange={e => setNewClassData({ ...newClassData, namaKelas: e.target.value })}
+                  placeholder="Contoh: X RPL 3 atau X TKR 1"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Jurusan / Konsentrasi Keahlian *</label>
+                <input
+                  type="text"
+                  required
+                  value={newClassData.jurusan}
+                  onChange={e => setNewClassData({ ...newClassData, jurusan: e.target.value })}
+                  placeholder="Contoh: Rekayasa Perangkat Lunak"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">Guru Wali / Pengampu</label>
+                  <input
+                    type="text"
+                    value={newClassData.guru}
+                    onChange={e => setNewClassData({ ...newClassData, guru: e.target.value })}
+                    placeholder="Contoh: Bambang Trianto, S.Pd."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">Jumlah Siswa</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={newClassData.jmlSiswa}
+                    onChange={e => setNewClassData({ ...newClassData, jmlSiswa: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddClassModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-heading font-black shadow-lg shadow-indigo-600/30 active:scale-95"
+                >
+                  Simpan Kelas Baru
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT KELAS KEJURUAN */}
+      {editClassItem && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-heading font-black text-lg text-white flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-amber-400" />
+                Edit Rombel Kelas: {editClassItem.namaKelas}
+              </h3>
+              <button
+                onClick={() => setEditClassItem(null)}
+                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditClassSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Nama Rombel Kelas *</label>
+                <input
+                  type="text"
+                  required
+                  value={editClassItem.namaKelas}
+                  onChange={e => setEditClassItem({ ...editClassItem, namaKelas: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Jurusan / Konsentrasi Keahlian *</label>
+                <input
+                  type="text"
+                  required
+                  value={editClassItem.jurusan}
+                  onChange={e => setEditClassItem({ ...editClassItem, jurusan: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">Guru Wali / Pengampu</label>
+                  <input
+                    type="text"
+                    value={editClassItem.guru}
+                    onChange={e => setEditClassItem({ ...editClassItem, guru: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">Jumlah Siswa</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={editClassItem.jmlSiswa}
+                    onChange={e => setEditClassItem({ ...editClassItem, jmlSiswa: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditClassItem(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-heading font-black shadow-lg shadow-amber-500/20 active:scale-95"
+                >
+                  Simpan Perubahan Kelas
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: INPUT DARI TEMPLATE CSV/EXCEL */}
       {showTemplateModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5 max-h-[90vh] overflow-y-auto">
@@ -1155,11 +1792,10 @@ export const AdminManagement: React.FC = () => {
               </button>
             </div>
 
-            {/* Target Role Selector & Download Template */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
-                  Pilih Target Impor:
+                  Pilih Target Role yang Dibuat:
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -1170,11 +1806,11 @@ export const AdminManagement: React.FC = () => {
                     }}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
                       templateTargetRole === 'siswa'
-                        ? 'bg-emerald-600 text-white border-emerald-400 shadow-md'
+                        ? 'bg-emerald-600 text-white border-emerald-400 shadow-md font-heading font-black'
                         : 'bg-slate-800 text-slate-400 border-slate-700'
                     }`}
                   >
-                    Data Siswa
+                    Role Siswa
                   </button>
                   <button
                     type="button"
@@ -1184,11 +1820,11 @@ export const AdminManagement: React.FC = () => {
                     }}
                     className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
                       templateTargetRole === 'guru'
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-heading font-black'
                         : 'bg-slate-800 text-slate-400 border-slate-700'
                     }`}
                   >
-                    Data Guru
+                    Role Guru
                   </button>
                 </div>
               </div>
@@ -1208,7 +1844,6 @@ export const AdminManagement: React.FC = () => {
               </div>
             </div>
 
-            {/* File Upload OR Paste Box */}
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
                 <span className="flex items-center gap-1.5">
@@ -1247,7 +1882,6 @@ export const AdminManagement: React.FC = () => {
               </div>
             </div>
 
-            {/* Error notice */}
             {parseError && (
               <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500 text-rose-300 text-xs font-semibold flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -1255,7 +1889,6 @@ export const AdminManagement: React.FC = () => {
               </div>
             )}
 
-            {/* Live Preview Table */}
             {parsedPreview.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-emerald-400">
@@ -1286,7 +1919,6 @@ export const AdminManagement: React.FC = () => {
               </div>
             )}
 
-            {/* Modal Actions */}
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
               <button
                 type="button"
@@ -1305,301 +1937,6 @@ export const AdminManagement: React.FC = () => {
                 Konfirmasi & Impor {parsedPreview.length} Data ke Sistem
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: INPUT MANUAL USER */}
-      {showManualModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-heading font-black text-lg sm:text-xl text-white flex items-center gap-2">
-                <Plus className="w-5 h-5 text-amber-400" />
-                Tambah Manual Data {userSubTab === 'guru' ? 'Guru' : 'Siswa'} SMKN 1 Sidayu
-              </h3>
-              <button
-                onClick={() => setShowManualModal(false)}
-                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddManualSubmit} className="space-y-4 text-xs">
-              {/* Form Guru Manual */}
-              {userSubTab === 'guru' ? (
-                <>
-                  <div>
-                    <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap & Gelar *</label>
-                    <input
-                      type="text"
-                      required
-                      value={manualTeacher.nama}
-                      onChange={e => setManualTeacher({ ...manualTeacher, nama: e.target.value })}
-                      placeholder="Contoh: Dra. Siti Aminah, M.Pd."
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-slate-300 uppercase mb-1">NIP / NUPTK</label>
-                      <input
-                        type="text"
-                        value={manualTeacher.nip}
-                        onChange={e => setManualTeacher({ ...manualTeacher, nip: e.target.value })}
-                        placeholder="19820315 200801 2 005"
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-slate-300 uppercase mb-1">Kelas Binaan</label>
-                      <input
-                        type="text"
-                        value={manualTeacher.kelas}
-                        onChange={e => setManualTeacher({ ...manualTeacher, kelas: e.target.value })}
-                        placeholder="X RPL 1, X TKJ 1"
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-300 uppercase mb-1">Mata Pelajaran</label>
-                    <input
-                      type="text"
-                      value={manualTeacher.mapel}
-                      onChange={e => setManualTeacher({ ...manualTeacher, mapel: e.target.value })}
-                      placeholder="Bahasa Inggris SMKN 1 Sidayu Kelas X"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-300 uppercase mb-1">Email Resmi Guru</label>
-                    <input
-                      type="email"
-                      value={manualTeacher.email}
-                      onChange={e => setManualTeacher({ ...manualTeacher, email: e.target.value })}
-                      placeholder="guru@smkn1sidayu.sch.id"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
-                    />
-                  </div>
-                </>
-              ) : (
-                /* Form Siswa Manual */
-                <>
-                  <div>
-                    <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap Siswa *</label>
-                    <input
-                      type="text"
-                      required
-                      value={manualStudent.nama}
-                      onChange={e => setManualStudent({ ...manualStudent, nama: e.target.value })}
-                      placeholder="Contoh: Muhammad Akbar Ramadhan"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-slate-300 uppercase mb-1">NIS (Nomor Induk Siswa) *</label>
-                      <input
-                        type="text"
-                        required
-                        value={manualStudent.nis}
-                        onChange={e => setManualStudent({ ...manualStudent, nis: e.target.value })}
-                        placeholder="242510001"
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-slate-300 uppercase mb-1">Kelas Kejuruan *</label>
-                      <select
-                        value={manualStudent.kelas}
-                        onChange={e => setManualStudent({ ...manualStudent, kelas: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
-                      >
-                        {[
-                          'X RPL 1', 'X RPL 2', 
-                          'X TKJ 1', 'X TKJ 2', 
-                          'X AKL 1', 'X AKL 2', 
-                          'X Otomotif 1', 'X DPIB 1', 
-                          'X Kuliner 1', 'X DKV 1'
-                        ].map(c => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-300 uppercase mb-1">Jurusan / Konsentrasi Keahlian *</label>
-                    <input
-                      type="text"
-                      required
-                      value={manualStudent.jurusan}
-                      onChange={e => setManualStudent({ ...manualStudent, jurusan: e.target.value })}
-                      placeholder="Contoh: Rekayasa Perangkat Lunak"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-300 uppercase mb-1">Email Siswa SMKN 1 Sidayu</label>
-                    <input
-                      type="email"
-                      value={manualStudent.email}
-                      onChange={e => setManualStudent({ ...manualStudent, email: e.target.value })}
-                      placeholder="siswa@smkn1sidayu.sch.id"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
-                    />
-                  </div>
-                </>
-              )}
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowManualModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-heading font-black shadow-lg shadow-amber-500/20 active:scale-95"
-                >
-                  Simpan Data
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 3: EDIT USER */}
-      {editItem && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-heading font-black text-lg text-white flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-indigo-400" />
-                Edit Data {editItem.type === 'guru' ? 'Guru' : 'Siswa'}
-              </h3>
-              <button
-                onClick={() => setEditItem(null)}
-                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditUser} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap</label>
-                <input
-                  type="text"
-                  required
-                  value={editItem.data.nama}
-                  onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, nama: e.target.value } })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
-                />
-              </div>
-
-              {editItem.type === 'guru' ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-slate-300 uppercase mb-1">NIP</label>
-                      <input
-                        type="text"
-                        value={editItem.data.nip}
-                        onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, nip: e.target.value } })}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-slate-300 uppercase mb-1">Kelas Binaan</label>
-                      <input
-                        type="text"
-                        value={editItem.data.kelas}
-                        onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, kelas: e.target.value } })}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-300 uppercase mb-1">Mata Pelajaran</label>
-                    <input
-                      type="text"
-                      value={editItem.data.mapel}
-                      onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, mapel: e.target.value } })}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-slate-300 uppercase mb-1">NIS</label>
-                      <input
-                        type="text"
-                        value={editItem.data.nis}
-                        onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, nis: e.target.value } })}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-slate-300 uppercase mb-1">Kelas</label>
-                      <input
-                        type="text"
-                        value={editItem.data.kelas}
-                        onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, kelas: e.target.value } })}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-300 uppercase mb-1">Jurusan</label>
-                    <input
-                      type="text"
-                      value={editItem.data.jurusan}
-                      onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, jurusan: e.target.value } })}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
-                    />
-                  </div>
-                </>
-              )}
-
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Email</label>
-                <input
-                  type="email"
-                  value={editItem.data.email}
-                  onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, email: e.target.value } })}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setEditItem(null)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-heading font-black shadow-lg shadow-indigo-600/20 active:scale-95"
-                >
-                  Perbarui Perubahan
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
