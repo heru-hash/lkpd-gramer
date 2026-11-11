@@ -5,6 +5,8 @@ export interface UserProfile {
   nama: string;
   email: string;
   role: UserRole;
+  sekolah?: string;
+  jabatan?: string;
   kelas?: string;
   jurusan?: string;
   nis?: string;

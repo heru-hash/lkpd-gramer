@@ -209,10 +209,10 @@ export const AuthPage: React.FC = () => {
       setLoginEmail(SUPER_ADMIN_EMAIL);
       setLoginPassword('AdminSMK2026!');
     } else if (role === 'guru') {
-      setLoginEmail('bambang.guru@smk.sch.id');
+      setLoginEmail('bambang.guru@smkn1sidayu.sch.id');
       setLoginPassword('GuruSMK2026!');
     } else {
-      setLoginEmail('rizky.siswa@smk.sch.id');
+      setLoginEmail('rizky.siswa@smkn1sidayu.sch.id');
       setLoginPassword('SiswaSMK2026!');
     }
   };
@@ -233,14 +233,14 @@ export const AuthPage: React.FC = () => {
           </div>
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-bold uppercase tracking-wider">
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              Sistem Otentikasi Aman • Kurikulum Merdeka
+              <School className="w-3.5 h-3.5 text-emerald-400" />
+              SMKN 1 Sidayu • Kurikulum Merdeka Fase E
             </div>
             <h1 className="font-heading font-black text-3xl sm:text-4xl text-white tracking-tight mt-2">
               Grammar Challenge X
             </h1>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Portal Pembelajaran Bahasa Inggris Interaktif SMK Kelas X
+            <p className="text-xs sm:text-sm text-slate-300 mt-1 font-medium">
+              Portal Pembelajaran Bahasa Inggris Interaktif SMKN 1 Sidayu
             </p>
           </div>
         </div>
@@ -310,7 +310,7 @@ export const AuthPage: React.FC = () => {
                     required
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="nama@smk.sch.id"
+                    placeholder="nama@smkn1sidayu.sch.id"
                     className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -448,13 +448,13 @@ export const AuthPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Email Sekolah / Pribadi</label>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Email Siswa SMKN 1 Sidayu</label>
                 <input
                   type="email"
                   required
                   value={siswaForm.email}
                   onChange={e => setSiswaForm({ ...siswaForm, email: e.target.value })}
-                  placeholder="siswa@smk.sch.id"
+                  placeholder="siswa@smkn1sidayu.sch.id"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -527,13 +527,13 @@ export const AuthPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Email Resmi Sekolah</label>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Email Resmi Guru SMKN 1 Sidayu</label>
                 <input
                   type="email"
                   required
                   value={guruForm.email}
                   onChange={e => setGuruForm({ ...guruForm, email: e.target.value })}
-                  placeholder="guru@smk.sch.id"
+                  placeholder="guru@smkn1sidayu.sch.id"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
                 />
               </div>

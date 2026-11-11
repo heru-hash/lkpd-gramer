@@ -52,7 +52,7 @@ export const Leaderboard: React.FC = () => {
   ];
 
   const SEED_TOP_SEKOLAH = [
-    { rank: 1, name: 'SMK Negeri 1 Gresik (SMANIKE)', kota: 'Gresik, Jawa Timur', score: 38450, badge: 'Pusat Keunggulan' },
+    { rank: 1, name: 'SMKN 1 Sidayu (SMEKSA)', kota: 'Sidayu - Gresik, Jawa Timur', score: 38450, badge: 'Pusat Keunggulan' },
     { rank: 2, name: 'SMK Negeri 2 Surabaya', kota: 'Surabaya, Jawa Timur', score: 35820, badge: 'Pusat Keunggulan' },
     { rank: 3, name: 'SMK Negeri 1 Tuban', kota: 'Tuban, Jawa Timur', score: 32410, badge: 'Rujukan Vokasi' },
     { rank: 4, name: 'SMK Negeri 3 Buduran Sidoarjo', kota: 'Sidoarjo, Jawa Timur', score: 29840, badge: 'Rujukan Vokasi' },

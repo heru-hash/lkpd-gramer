@@ -48,7 +48,7 @@ export const Profile: React.FC = () => {
     jurusan: userProfile?.jurusan || 'Rekayasa Perangkat Lunak',
     nis: userProfile?.nis || '',
     nip: userProfile?.nip || '',
-    mataPelajaran: userProfile?.mataPelajaran || 'Bahasa Inggris SMK Kelas X',
+    mataPelajaran: userProfile?.mataPelajaran || 'Bahasa Inggris SMKN 1 Sidayu Kelas X',
     photoURL: userProfile?.photoURL || PRESET_AVATARS[0].url,
     bio: userProfile?.bio || 'Mempersiapkan kemahiran bahasa Inggris untuk karir industri global.',
     targetScore: userProfile?.targetScore || 95,
@@ -62,7 +62,7 @@ export const Profile: React.FC = () => {
         jurusan: userProfile.jurusan || 'Rekayasa Perangkat Lunak',
         nis: userProfile.nis || '',
         nip: userProfile.nip || '',
-        mataPelajaran: userProfile.mataPelajaran || 'Bahasa Inggris SMK Kelas X',
+        mataPelajaran: userProfile.mataPelajaran || 'Bahasa Inggris SMKN 1 Sidayu Kelas X',
         photoURL: userProfile.photoURL || PRESET_AVATARS[0].url,
         bio: userProfile.bio || 'Mempersiapkan kemahiran bahasa Inggris untuk karir industri global.',
         targetScore: userProfile.targetScore || 95,
@@ -103,9 +103,9 @@ export const Profile: React.FC = () => {
   };
 
   const roleLabel = {
-    admin: 'Administrator Sistem',
-    guru: 'Guru Pengampu SMK',
-    siswa: 'Siswa Kelas X SMK',
+    admin: 'Administrator SMKN 1 Sidayu',
+    guru: 'Guru Pengampu SMKN 1 Sidayu',
+    siswa: 'Siswa Kelas X SMKN 1 Sidayu',
   }[userProfile?.role || 'siswa'];
 
   const roleBadgeColor = {

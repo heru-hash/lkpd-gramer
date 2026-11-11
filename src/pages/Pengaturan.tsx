@@ -52,7 +52,7 @@ export const Pengaturan: React.FC = () => {
     jurusan: userProfile?.jurusan || 'Rekayasa Perangkat Lunak',
     nis: userProfile?.nis || '',
     nip: userProfile?.nip || '',
-    mataPelajaran: userProfile?.mataPelajaran || 'Bahasa Inggris SMK Kelas X',
+    mataPelajaran: userProfile?.mataPelajaran || 'Bahasa Inggris SMKN 1 Sidayu Kelas X',
     photoURL: userProfile?.photoURL || PRESET_AVATARS[0].url,
     bio: userProfile?.bio || 'Mempersiapkan kemahiran bahasa Inggris untuk karir industri global.',
     targetScore: userProfile?.targetScore || 95,
@@ -66,7 +66,7 @@ export const Pengaturan: React.FC = () => {
         jurusan: userProfile.jurusan || 'Rekayasa Perangkat Lunak',
         nis: userProfile.nis || '',
         nip: userProfile.nip || '',
-        mataPelajaran: userProfile.mataPelajaran || 'Bahasa Inggris SMK Kelas X',
+        mataPelajaran: userProfile.mataPelajaran || 'Bahasa Inggris SMKN 1 Sidayu Kelas X',
         photoURL: userProfile.photoURL || PRESET_AVATARS[0].url,
         bio: userProfile.bio || 'Mempersiapkan kemahiran bahasa Inggris untuk karir industri global.',
         targetScore: userProfile.targetScore || 95,
@@ -654,10 +654,10 @@ export const Pengaturan: React.FC = () => {
           <div className="p-5 rounded-2xl bg-indigo-950/40 border border-indigo-800/40 space-y-2">
             <div className="flex items-center gap-2 text-indigo-300 font-bold text-sm">
               <Info className="w-4 h-4" />
-              <span>Spesifikasi Kurikulum Merdeka SMK</span>
+              <span>Spesifikasi Kurikulum Merdeka SMKN 1 Sidayu</span>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Aplikasi ini dikembangkan selaras dengan Capaian Pembelajaran (CP) Bahasa Inggris Fase E untuk SMK Kelas X, mengintegrasikan teks transaksional, recount teks praktikum, dan komunikasi instruksional di tempat kerja kejuruan.
+              Aplikasi ini dikembangkan selaras dengan Capaian Pembelajaran (CP) Bahasa Inggris Fase E untuk SMKN 1 Sidayu Kelas X, mengintegrasikan teks transaksional, recount teks praktikum bengkel dan lab, serta komunikasi instruksional di tempat kerja kejuruan.
             </p>
           </div>
         </div>

@@ -14,35 +14,74 @@ import {
   Plus, 
   Database,
   RefreshCw,
-  Search
+  Search,
+  FileSpreadsheet,
+  Edit3,
+  X,
+  Save,
+  UserCheck,
+  School,
+  FileText,
+  ClipboardPaste,
+  Smile,
+  AlertTriangle,
+  UserCog
 } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useIFP } from '../context/IFPContext';
 import { GRAMMAR_QUESTION_BANK } from '../data/grammarQuestions';
 import { GRAMMAR_MATERIALS } from '../data/materialsData';
+import { PRESET_AVATARS } from './Profile';
 import { triggerConfetti } from '../utils/confetti';
 import { soundManager } from '../utils/audio';
 
+interface TeacherItem {
+  id: string;
+  nama: string;
+  nip: string;
+  mapel: string;
+  kelas: string;
+  email: string;
+}
+
+interface StudentItem {
+  id: string;
+  nama: string;
+  nis: string;
+  kelas: string;
+  jurusan: string;
+  email: string;
+}
+
 export const AdminManagement: React.FC = () => {
-  const { userProfile } = useAuth();
+  const { userProfile, updateUserBio } = useAuth();
   const { triggerHaptic } = useIFP();
 
-  const [activeTab, setActiveTab] = useState<'users' | 'classes' | 'questions' | 'backup' | 'logs'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'admin-profile' | 'classes' | 'questions' | 'backup' | 'logs'>('users');
+  const [userSubTab, setUserSubTab] = useState<'guru' | 'siswa'>('guru');
+  const [searchQuery, setSearchQuery] = useState('');
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
+  const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
-  // Managed Teachers & Students State
-  const [teachers, setTeachers] = useState([
-    { id: 'g1', nama: 'Bambang Trianto, S.Pd.', nip: '19850412 201001 1 008', mapel: 'Bahasa Inggris', kelas: 'X RPL, X TKJ' },
-    { id: 'g2', nama: 'Dra. Endang Sulistyo', nip: '19790615 200501 2 004', mapel: 'Bahasa Inggris Kejuruan', kelas: 'X AKL, X DPIB' },
-    { id: 'g3', nama: 'Ahmad Fauzi, M.Pd.', nip: '19900820 201503 1 002', mapel: 'English for Vocational Tech', kelas: 'X Otomotif' },
+  // Managed Teachers & Students State (Initialized with SMKN 1 Sidayu Data)
+  const [teachers, setTeachers] = useState<TeacherItem[]>([
+    { id: 'g1', nama: 'Bambang Trianto, S.Pd.', nip: '19850412 201001 1 008', mapel: 'Bahasa Inggris SMK Kelas X', kelas: 'X RPL 1, X RPL 2, X TKJ 1', email: 'bambang.guru@smkn1sidayu.sch.id' },
+    { id: 'g2', nama: 'Dra. Endang Sulistyo', nip: '19790615 200501 2 004', mapel: 'Bahasa Inggris Kejuruan Bisnis', kelas: 'X AKL 1, X AKL 2, X DPIB 1', email: 'endang.guru@smkn1sidayu.sch.id' },
+    { id: 'g3', nama: 'Ahmad Fauzi, M.Pd.', nip: '19900820 201503 1 002', mapel: 'English for Vocational Tech', kelas: 'X Otomotif 1, X Pemesinan 1', email: 'fauzi.guru@smkn1sidayu.sch.id' },
+    { id: 'g4', nama: 'Siti Rahmawati, S.Pd.', nip: '19920110 201902 2 007', mapel: 'English Communication for Hospitality', kelas: 'X Kuliner 1, X DKV 1', email: 'siti.rahma@smkn1sidayu.sch.id' },
   ]);
 
-  const [students, setStudents] = useState([
-    { id: 's1', nama: 'Ahmad Rizky Pratama', nis: '232410145', kelas: 'X RPL 1', jurusan: 'RPL', email: 'rizky@smk.sch.id' },
-    { id: 's2', nama: 'Siti Nur Aisyah', nis: '232410146', kelas: 'X AKL 1', jurusan: 'AKL', email: 'siti@smk.sch.id' },
-    { id: 's3', nama: 'Budi Santoso', nis: '232410147', kelas: 'X TKJ 1', jurusan: 'TKJ', email: 'budi@smk.sch.id' },
-    { id: 's4', nama: 'Dian Permata', nis: '232410148', kelas: 'X DPIB 1', jurusan: 'DPIB', email: 'dian@smk.sch.id' },
-    { id: 's5', nama: 'Farhan Maulana', nis: '232410149', kelas: 'X Otomotif 1', jurusan: 'Otomotif', email: 'farhan@smk.sch.id' },
+  const [students, setStudents] = useState<StudentItem[]>([
+    { id: 's1', nama: 'Ahmad Rizky Pratama', nis: '232410145', kelas: 'X RPL 1', jurusan: 'Rekayasa Perangkat Lunak', email: 'rizky.siswa@smkn1sidayu.sch.id' },
+    { id: 's2', nama: 'Siti Nur Aisyah', nis: '232410146', kelas: 'X AKL 1', jurusan: 'Akuntansi & Keuangan', email: 'siti.siswa@smkn1sidayu.sch.id' },
+    { id: 's3', nama: 'Budi Santoso', nis: '232410147', kelas: 'X TKJ 1', jurusan: 'Teknik Komputer & Jaringan', email: 'budi.siswa@smkn1sidayu.sch.id' },
+    { id: 's4', nama: 'Dian Permata', nis: '232410148', kelas: 'X DPIB 1', jurusan: 'Desain Pemodelan Bangunan', email: 'dian.siswa@smkn1sidayu.sch.id' },
+    { id: 's5', nama: 'Farhan Maulana', nis: '232410149', kelas: 'X Otomotif 1', jurusan: 'Teknik Kendaraan Ringan', email: 'farhan.siswa@smkn1sidayu.sch.id' },
+    { id: 's6', nama: 'Zahra Amelia', nis: '232410150', kelas: 'X Kuliner 1', jurusan: 'Tata Boga Industri', email: 'zahra.siswa@smkn1sidayu.sch.id' },
+    { id: 's7', nama: 'Muhammad Dimas', nis: '232410151', kelas: 'X RPL 2', jurusan: 'Rekayasa Perangkat Lunak', email: 'dimas.siswa@smkn1sidayu.sch.id' },
+    { id: 's8', nama: 'Aulia Rahma Putri', nis: '232410152', kelas: 'X AKL 2', jurusan: 'Akuntansi & Keuangan', email: 'aulia.siswa@smkn1sidayu.sch.id' },
   ]);
 
   const [classes, setClasses] = useState([
@@ -50,27 +89,411 @@ export const AdminManagement: React.FC = () => {
     { id: 'c2', namaKelas: 'X RPL 2', jurusan: 'Rekayasa Perangkat Lunak', guru: 'Bambang Trianto, S.Pd.', jmlSiswa: 36 },
     { id: 'c3', namaKelas: 'X TKJ 1', jurusan: 'Teknik Komputer & Jaringan', guru: 'Bambang Trianto, S.Pd.', jmlSiswa: 36 },
     { id: 'c4', namaKelas: 'X AKL 1', jurusan: 'Akuntansi & Keuangan', guru: 'Dra. Endang Sulistyo', jmlSiswa: 35 },
-    { id: 'c5', namaKelas: 'X DPIB 1', jurusan: 'Desain Pemodelan Bangunan', guru: 'Dra. Endang Sulistyo', jmlSiswa: 34 },
-    { id: 'c6', namaKelas: 'X Otomotif 1', jurusan: 'Teknik Kendaraan Ringan', guru: 'Ahmad Fauzi, M.Pd.', jmlSiswa: 35 },
+    { id: 'c5', namaKelas: 'X AKL 2', jurusan: 'Akuntansi & Keuangan', guru: 'Dra. Endang Sulistyo', jmlSiswa: 35 },
+    { id: 'c6', namaKelas: 'X DPIB 1', jurusan: 'Desain Pemodelan Bangunan', guru: 'Dra. Endang Sulistyo', jmlSiswa: 34 },
+    { id: 'c7', namaKelas: 'X Otomotif 1', jurusan: 'Teknik Kendaraan Ringan', guru: 'Ahmad Fauzi, M.Pd.', jmlSiswa: 35 },
+    { id: 'c8', namaKelas: 'X Kuliner 1', jurusan: 'Tata Boga Industri', guru: 'Siti Rahmawati, S.Pd.', jmlSiswa: 34 },
+    { id: 'c9', namaKelas: 'X DKV 1', jurusan: 'Desain Komunikasi Visual', guru: 'Siti Rahmawati, S.Pd.', jmlSiswa: 34 },
   ]);
 
   // System logs
-  const activityLogs = [
-    { time: '10:45:12', user: 'Bambang Trianto', action: 'Membuat 5 Soal AI baru pada topik Future Tense' },
+  const [activityLogs, setActivityLogs] = useState([
+    { time: '10:45:12', user: 'Bambang Trianto', action: 'Membuat 5 Soal AI baru pada topik Future Tense SMKN 1 Sidayu' },
     { time: '10:32:05', user: 'Ahmad Rizky Pratama', action: 'Menyelesaikan Level 6 Boss Battle dengan skor 98' },
     { time: '10:15:30', user: 'Siti Nur Aisyah', action: 'Mendapatkan Badge 🏅 Champion (1000+ pts)' },
-    { time: '09:50:18', user: 'Admin Heru', action: 'Sinkronisasi database Firestore selesai (300+ soal aktif)' },
+    { time: '09:50:18', user: 'Admin Heru', action: 'Sinkronisasi database Firestore SMKN 1 Sidayu selesai (300+ soal aktif)' },
     { time: '09:20:44', user: 'Team Battle Arena', action: 'Sesi IFP Tim Biru vs Tim Merah selesai (Pemenang: Tim Biru)' },
-  ];
+  ]);
+
+  // Modals state
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [editItem, setEditItem] = useState<{ type: 'guru' | 'siswa'; data: any } | null>(null);
+
+  // Manual Form States
+  const [manualTeacher, setManualTeacher] = useState({
+    nama: '',
+    nip: '',
+    mapel: 'Bahasa Inggris SMKN 1 Sidayu Kelas X',
+    kelas: 'X RPL 1',
+    email: '',
+  });
+
+  const [manualStudent, setManualStudent] = useState({
+    nama: '',
+    nis: '',
+    kelas: 'X RPL 1',
+    jurusan: 'Rekayasa Perangkat Lunak',
+    email: '',
+  });
+
+  // Template Import States
+  const [templateTargetRole, setTemplateTargetRole] = useState<'guru' | 'siswa'>('siswa');
+  const [rawPastedText, setRawPastedText] = useState('');
+  const [parsedPreview, setParsedPreview] = useState<any[]>([]);
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  // Admin Profile Edit State
+  const [adminProfileForm, setAdminProfileForm] = useState({
+    nama: userProfile?.nama || 'Heru Administrator SMKN 1 Sidayu',
+    email: userProfile?.email || 'heru@smanike-gresik.sch.id',
+    nip: userProfile?.nip || '19840218 200902 1 004',
+    jabatan: userProfile?.jabatan || 'Koordinator IT & Administrator SMKN 1 Sidayu',
+    sekolah: 'SMKN 1 Sidayu',
+    photoURL: userProfile?.photoURL || PRESET_AVATARS[0].url,
+    bio: userProfile?.bio || 'Mengembangkan inovasi pembelajaran grammar interaktif papan sentuh digital di SMKN 1 Sidayu.',
+  });
+
+  // Filtered lists
+  const filteredTeachers = teachers.filter(t => 
+    t.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.nip.includes(searchQuery) ||
+    t.kelas.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredStudents = students.filter(s => 
+    s.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.nis.includes(searchQuery) ||
+    s.kelas.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.jurusan.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Download Sample CSV Template
+  const handleDownloadTemplate = (type: 'guru' | 'siswa') => {
+    triggerHaptic();
+    let csvContent = '';
+    let fileName = '';
+
+    if (type === 'guru') {
+      fileName = 'Template_Import_Guru_SMKN1_Sidayu.csv';
+      csvContent = 'Nama Lengkap,NIP,Mata Pelajaran,Kelas Binaan,Email Resmi\n' +
+        'Bambang Trianto S.Pd.,19850412 201001 1 008,Bahasa Inggris SMK Kelas X,X RPL 1; X TKJ 1,bambang.guru@smkn1sidayu.sch.id\n' +
+        'Dra. Endang Sulistyo,19790615 200501 2 004,Bahasa Inggris Kejuruan Bisnis,X AKL 1; X DPIB 1,endang.guru@smkn1sidayu.sch.id\n' +
+        'Ahmad Fauzi M.Pd.,19900820 201503 1 002,English for Vocational Tech,X Otomotif 1,fauzi.guru@smkn1sidayu.sch.id';
+    } else {
+      fileName = 'Template_Import_Siswa_SMKN1_Sidayu.csv';
+      csvContent = 'Nama Lengkap Siswa,NIS,Kelas,Jurusan,Email Siswa\n' +
+        'Ahmad Rizky Pratama,232410145,X RPL 1,Rekayasa Perangkat Lunak,rizky.siswa@smkn1sidayu.sch.id\n' +
+        'Siti Nur Aisyah,232410146,X AKL 1,Akuntansi & Keuangan,siti.siswa@smkn1sidayu.sch.id\n' +
+        'Budi Santoso,232410147,X TKJ 1,Teknik Komputer & Jaringan,budi.siswa@smkn1sidayu.sch.id\n' +
+        'Dian Permata,232410148,X DPIB 1,Desain Pemodelan Bangunan,dian.siswa@smkn1sidayu.sch.id';
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    soundManager.playCorrect();
+  };
+
+  // Parse CSV or Spreadsheet TSV Text
+  const handleParseText = (text: string, role: 'guru' | 'siswa') => {
+    setParseError(null);
+    if (!text.trim()) {
+      setParsedPreview([]);
+      return;
+    }
+
+    try {
+      const lines = text.trim().split(/\r\n|\n|\r/);
+      if (lines.length < 1) {
+        setParseError('Data kosong atau tidak memiliki baris.');
+        return;
+      }
+
+      // Check if first row is header
+      const headerLine = lines[0].toLowerCase();
+      const hasHeader = headerLine.includes('nama') || headerLine.includes('nip') || headerLine.includes('nis') || headerLine.includes('email');
+      const dataRows = hasHeader ? lines.slice(1) : lines;
+
+      const results: any[] = [];
+
+      for (let i = 0; i < dataRows.length; i++) {
+        const line = dataRows[i].trim();
+        if (!line) continue;
+
+        // Auto-detect delimiter: tab, comma, semicolon
+        let parts: string[] = [];
+        if (line.includes('\t')) {
+          parts = line.split('\t');
+        } else if (line.includes(';')) {
+          parts = line.split(';');
+        } else {
+          parts = line.split(',');
+        }
+
+        parts = parts.map(p => p.trim().replace(/^["']|["']$/g, ''));
+
+        if (role === 'guru') {
+          // Columns: Nama, NIP, Mapel, Kelas, Email
+          const nama = parts[0] || `Guru Baru ${i + 1}`;
+          const nip = parts[1] || '-';
+          const mapel = parts[2] || 'Bahasa Inggris SMKN 1 Sidayu';
+          const kelas = parts[3] || 'X RPL 1';
+          const email = parts[4] || `${nama.toLowerCase().replace(/[^a-z0-9]/g, '.')}@smkn1sidayu.sch.id`;
+
+          results.push({
+            id: `g-import-${Date.now()}-${i}`,
+            nama,
+            nip,
+            mapel,
+            kelas,
+            email,
+          });
+        } else {
+          // Columns: Nama, NIS, Kelas, Jurusan, Email
+          const nama = parts[0] || `Siswa Baru ${i + 1}`;
+          const nis = parts[1] || String(242510000 + i);
+          const kelas = parts[2] || 'X RPL 1';
+          const jurusan = parts[3] || (kelas.includes('RPL') ? 'Rekayasa Perangkat Lunak' : kelas.includes('TKJ') ? 'Teknik Komputer & Jaringan' : 'Akuntansi & Keuangan');
+          const email = parts[4] || `${nama.toLowerCase().replace(/[^a-z0-9]/g, '.')}@smkn1sidayu.sch.id`;
+
+          results.push({
+            id: `s-import-${Date.now()}-${i}`,
+            nama,
+            nis,
+            kelas,
+            jurusan,
+            email,
+          });
+        }
+      }
+
+      if (results.length === 0) {
+        setParseError('Tidak ada baris data valid yang terdeteksi.');
+      } else {
+        setParsedPreview(results);
+      }
+    } catch (err: any) {
+      setParseError('Gagal memproses data: ' + err.message);
+    }
+  };
+
+  // File Upload Handler for Template
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      setRawPastedText(text);
+      handleParseText(text, templateTargetRole);
+    };
+    reader.readAsText(file);
+  };
+
+  // Save Imported Users to State & Firestore
+  const handleCommitTemplateImport = async () => {
+    triggerHaptic();
+    if (parsedPreview.length === 0) return;
+
+    try {
+      if (templateTargetRole === 'guru') {
+        setTeachers(prev => [...prev, ...parsedPreview]);
+        // Sync each to Firestore users collection
+        for (const item of parsedPreview) {
+          try {
+            await setDoc(doc(db, 'users', item.id), {
+              uid: item.id,
+              nama: item.nama,
+              email: item.email,
+              role: 'guru',
+              nip: item.nip,
+              mataPelajaran: item.mapel,
+              kelas: item.kelas,
+              sekolah: 'SMKN 1 Sidayu',
+              createdAt: new Date().toISOString()
+            });
+          } catch {
+            // local state retained
+          }
+        }
+        setActionSuccessMsg(`Berhasil mengimpor ${parsedPreview.length} data Guru SMKN 1 Sidayu dari template!`);
+      } else {
+        setStudents(prev => [...prev, ...parsedPreview]);
+        for (const item of parsedPreview) {
+          try {
+            await setDoc(doc(db, 'users', item.id), {
+              uid: item.id,
+              nama: item.nama,
+              email: item.email,
+              role: 'siswa',
+              nis: item.nis,
+              kelas: item.kelas,
+              jurusan: item.jurusan,
+              sekolah: 'SMKN 1 Sidayu',
+              createdAt: new Date().toISOString()
+            });
+          } catch {
+            // local state retained
+          }
+        }
+        setActionSuccessMsg(`Berhasil mengimpor ${parsedPreview.length} data Siswa SMKN 1 Sidayu dari template!`);
+      }
+
+      setActivityLogs(prev => [
+        { time: new Date().toLocaleTimeString(), user: userProfile?.nama || 'Admin Heru', action: `Import ${parsedPreview.length} ${templateTargetRole} SMKN 1 Sidayu dari template` },
+        ...prev
+      ]);
+
+      setShowTemplateModal(false);
+      setParsedPreview([]);
+      setRawPastedText('');
+      soundManager.playVictory();
+      triggerConfetti();
+
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+    }
+  };
+
+  // Manual Add Handlers
+  const handleAddManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    triggerHaptic();
+
+    if (userSubTab === 'guru') {
+      const newTeacher: TeacherItem = {
+        id: `g-man-${Date.now()}`,
+        nama: manualTeacher.nama.trim(),
+        nip: manualTeacher.nip.trim(),
+        mapel: manualTeacher.mapel.trim(),
+        kelas: manualTeacher.kelas.trim(),
+        email: manualTeacher.email.trim() || `${manualTeacher.nama.toLowerCase().replace(/[^a-z0-9]/g, '.')}@smkn1sidayu.sch.id`,
+      };
+
+      setTeachers(prev => [newTeacher, ...prev]);
+
+      try {
+        await setDoc(doc(db, 'users', newTeacher.id), {
+          uid: newTeacher.id,
+          nama: newTeacher.nama,
+          email: newTeacher.email,
+          role: 'guru',
+          nip: newTeacher.nip,
+          mataPelajaran: newTeacher.mapel,
+          kelas: newTeacher.kelas,
+          sekolah: 'SMKN 1 Sidayu',
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Sync firestore:', err);
+      }
+
+      setActionSuccessMsg(`Guru baru "${newTeacher.nama}" berhasil ditambahkan ke SMKN 1 Sidayu!`);
+      setManualTeacher({ nama: '', nip: '', mapel: 'Bahasa Inggris SMKN 1 Sidayu Kelas X', kelas: 'X RPL 1', email: '' });
+    } else {
+      const newStudent: StudentItem = {
+        id: `s-man-${Date.now()}`,
+        nama: manualStudent.nama.trim(),
+        nis: manualStudent.nis.trim(),
+        kelas: manualStudent.kelas,
+        jurusan: manualStudent.jurusan.trim(),
+        email: manualStudent.email.trim() || `${manualStudent.nama.toLowerCase().replace(/[^a-z0-9]/g, '.')}@smkn1sidayu.sch.id`,
+      };
+
+      setStudents(prev => [newStudent, ...prev]);
+
+      try {
+        await setDoc(doc(db, 'users', newStudent.id), {
+          uid: newStudent.id,
+          nama: newStudent.nama,
+          email: newStudent.email,
+          role: 'siswa',
+          nis: newStudent.nis,
+          kelas: newStudent.kelas,
+          jurusan: newStudent.jurusan,
+          sekolah: 'SMKN 1 Sidayu',
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn('Sync firestore:', err);
+      }
+
+      setActionSuccessMsg(`Siswa baru "${newStudent.nama}" berhasil didaftarkan ke kelas ${newStudent.kelas}!`);
+      setManualStudent({ nama: '', nis: '', kelas: 'X RPL 1', jurusan: 'Rekayasa Perangkat Lunak', email: '' });
+    }
+
+    setShowManualModal(false);
+    soundManager.playCorrect();
+    triggerConfetti();
+
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  // Edit User Handler
+  const handleSaveEditUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    triggerHaptic();
+    if (!editItem) return;
+
+    if (editItem.type === 'guru') {
+      setTeachers(prev => prev.map(t => t.id === editItem.data.id ? editItem.data : t));
+      setActionSuccessMsg(`Data Guru "${editItem.data.nama}" berhasil diperbarui!`);
+    } else {
+      setStudents(prev => prev.map(s => s.id === editItem.data.id ? editItem.data : s));
+      setActionSuccessMsg(`Data Siswa "${editItem.data.nama}" berhasil diperbarui!`);
+    }
+
+    setEditItem(null);
+    soundManager.playCorrect();
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
+
+  // Delete User
+  const handleDeleteUser = (type: 'guru' | 'siswa', id: string, name: string) => {
+    triggerHaptic();
+    if (confirm(`Apakah Anda yakin ingin menghapus data ${type === 'guru' ? 'Guru' : 'Siswa'} "${name}"?`)) {
+      if (type === 'guru') {
+        setTeachers(prev => prev.filter(t => t.id !== id));
+      } else {
+        setStudents(prev => prev.filter(s => s.id !== id));
+      }
+      soundManager.playWrong();
+      setActionSuccessMsg(`Data "${name}" berhasil dihapus.`);
+      setTimeout(() => setActionSuccessMsg(null), 3000);
+    }
+  };
+
+  // Save Admin Profile
+  const handleSaveAdminProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    triggerHaptic();
+
+    await updateUserBio({
+      nama: adminProfileForm.nama.trim(),
+      nip: adminProfileForm.nip.trim(),
+      jabatan: adminProfileForm.jabatan.trim(),
+      sekolah: 'SMKN 1 Sidayu',
+      photoURL: adminProfileForm.photoURL,
+      bio: adminProfileForm.bio.trim(),
+    });
+
+    setActionSuccessMsg('Profil Administrator SMKN 1 Sidayu berhasil disimpan dan diperbarui!');
+    soundManager.playCorrect();
+    triggerConfetti();
+
+    setTimeout(() => setActionSuccessMsg(null), 3500);
+  };
 
   // Backup Data Trigger
   const handleBackup = () => {
     triggerHaptic();
     const backupPayload = {
-      appName: 'Grammar Challenge X SMK',
-      version: '2.0.0',
+      appName: 'Grammar Challenge X - SMKN 1 Sidayu',
+      version: '2.5.0',
       timestamp: new Date().toISOString(),
-      exportedBy: userProfile?.email || 'admin',
+      school: 'SMKN 1 Sidayu (Gresik)',
+      exportedBy: userProfile?.email || 'heru@smanike-gresik.sch.id',
       data: {
         teachers,
         students,
@@ -84,12 +507,12 @@ export const AdminManagement: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Backup_Grammar_Challenge_SMK_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `Backup_SMKN1_Sidayu_Grammar_${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
 
-    setBackupStatus('Backup berhasil diekspor sebagai file JSON aman!');
+    setBackupStatus('Backup data SMKN 1 Sidayu berhasil diekspor sebagai file JSON aman!');
     soundManager.playCorrect();
     triggerConfetti();
   };
@@ -108,7 +531,7 @@ export const AdminManagement: React.FC = () => {
           if (json.data.teachers) setTeachers(json.data.teachers);
           if (json.data.students) setStudents(json.data.students);
           if (json.data.classes) setClasses(json.data.classes);
-          setBackupStatus('Database berhasil dipulihkan (Restored) dari file backup!');
+          setBackupStatus('Database SMKN 1 Sidayu berhasil dipulihkan (Restored) dari file backup!');
           soundManager.playVictory();
           triggerConfetti();
         }
@@ -122,32 +545,42 @@ export const AdminManagement: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header Banner */}
       <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 text-xs font-bold mb-2 border border-rose-500/30">
-            <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
-            Panel Khusus Administrator Sekolah
+            <School className="w-3.5 h-3.5 text-rose-400" />
+            SMKN 1 Sidayu • Panel Khusus Administrator
           </div>
           <h1 className="font-heading font-black text-2xl sm:text-3xl text-white tracking-tight">
-            Manajemen Sistem & Kontrol Sekolah
+            Manajemen Pengguna & Kontrol Sistem SMKN 1 Sidayu
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Kelola data guru, siswa, kelas kejuruan, bank soal, audit log, backup dan pemulihan data.
+            Kelola data guru & siswa (input template CSV/Excel & manual), edit profil admin, rombel kelas, bank soal, dan cadangan data.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 text-xs font-black border border-rose-500/30">
-            Akses Penuh: Super Admin
+          <span className="px-3.5 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 text-xs font-black border border-rose-500/30 flex items-center gap-1.5 shadow-sm">
+            <ShieldAlert className="w-4 h-4 text-rose-400" />
+            Super Admin: {userProfile?.nama || 'Admin Heru'}
           </span>
         </div>
       </div>
+
+      {/* Global Success Notification */}
+      {actionSuccessMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-950/70 border border-emerald-500 text-emerald-200 text-xs sm:text-sm font-bold flex items-center gap-3 shadow-lg animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span>{actionSuccessMsg}</span>
+        </div>
+      )}
 
       {/* Admin Tab Navigation */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         {[
           { id: 'users', label: 'Kelola Guru & Siswa', icon: Users },
+          { id: 'admin-profile', label: 'Edit Profil Admin', icon: UserCog, highlight: true },
           { id: 'classes', label: 'Kelola Kelas Kejuruan', icon: GraduationCap },
           { id: 'questions', label: 'Monitoring Bank Soal (300+)', icon: Layers },
           { id: 'backup', label: 'Backup & Restore Data', icon: Database },
@@ -162,6 +595,8 @@ export const AdminManagement: React.FC = () => {
               className={`px-4 py-3 rounded-2xl text-xs sm:text-sm font-bold flex items-center gap-2 whitespace-nowrap transition border active:scale-95 touch-manipulation ${
                 isActive
                   ? 'bg-rose-600 text-white border-rose-400 shadow-lg shadow-rose-600/30'
+                  : tab.highlight
+                  ? 'bg-slate-900 text-amber-300 border-amber-500/40 hover:bg-slate-800'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white'
               }`}
             >
@@ -175,63 +610,385 @@ export const AdminManagement: React.FC = () => {
       {/* TAB 1: KELOLA GURU & SISWA */}
       {activeTab === 'users' && (
         <div className="space-y-6">
-          {/* Teachers Section */}
-          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="font-heading font-bold text-white text-base flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-amber-400" />
-                Daftar Guru Pengampu ({teachers.length} Orang)
-              </h3>
+          {/* Action Toolbar */}
+          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+            {/* Sub-tab Switcher: Guru vs Siswa */}
+            <div className="flex items-center p-1.5 rounded-2xl bg-slate-800/80 border border-slate-700/60 self-start">
+              <button
+                onClick={() => { triggerHaptic(); setUserSubTab('guru'); }}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 ${
+                  userSubTab === 'guru'
+                    ? 'bg-amber-500 text-slate-950 font-heading font-black shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <GraduationCap className="w-4 h-4" />
+                Data Guru Pengampu ({teachers.length})
+              </button>
+              <button
+                onClick={() => { triggerHaptic(); setUserSubTab('siswa'); }}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 ${
+                  userSubTab === 'siswa'
+                    ? 'bg-emerald-500 text-slate-950 font-heading font-black shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                Data Siswa Kelas X ({students.length})
+              </button>
             </div>
 
-            <div className="space-y-2.5">
-              {teachers.map(g => (
-                <div key={g.id} className="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <p className="font-heading font-bold text-white text-sm sm:text-base">{g.nama}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">NIP: {g.nip} • {g.mapel}</p>
-                  </div>
-                  <span className="px-3 py-1 text-xs font-bold rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    Kelas Binaan: {g.kelas}
-                  </span>
-                </div>
-              ))}
+            {/* Action Buttons: Input Template & Input Manual */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={() => {
+                  triggerHaptic();
+                  setTemplateTargetRole(userSubTab);
+                  setParsedPreview([]);
+                  setRawPastedText('');
+                  setParseError(null);
+                  setShowTemplateModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-heading font-bold text-xs sm:text-sm shadow-md shadow-indigo-600/30 flex items-center gap-2 active:scale-95 transition"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Input dari Template CSV/Excel
+              </button>
+
+              <button
+                onClick={() => {
+                  triggerHaptic();
+                  setShowManualModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:brightness-110 text-slate-950 font-heading font-black text-xs sm:text-sm shadow-md shadow-amber-500/20 flex items-center gap-2 active:scale-95 transition"
+              >
+                <Plus className="w-4 h-4" />
+                Tambah Manual {userSubTab === 'guru' ? 'Guru' : 'Siswa'}
+              </button>
             </div>
           </div>
 
-          {/* Students Section */}
-          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="font-heading font-bold text-white text-base flex items-center gap-2">
-                <Users className="w-5 h-5 text-emerald-400" />
-                Sampel Data Siswa Aktif ({students.length} Siswa Terdaftar)
-              </h3>
-            </div>
-
-            <div className="space-y-2.5">
-              {students.map(s => (
-                <div key={s.id} className="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <p className="font-heading font-bold text-white text-sm sm:text-base">{s.nama}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">NIS: {s.nis} • Email: {s.email}</p>
-                  </div>
-                  <span className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    {s.kelas} ({s.jurusan})
-                  </span>
-                </div>
-              ))}
-            </div>
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="w-5 h-5 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder={`Cari nama, ${userSubTab === 'guru' ? 'NIP, mapel' : 'NIS, jurusan'}, atau kelas...`}
+              className="w-full pl-12 pr-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            />
           </div>
+
+          {/* TEACHERS LIST */}
+          {userSubTab === 'guru' && (
+            <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 className="font-heading font-bold text-white text-base flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-amber-400" />
+                  Daftar Guru Pengampu SMKN 1 Sidayu ({filteredTeachers.length} Guru)
+                </h3>
+                <button
+                  onClick={() => handleDownloadTemplate('guru')}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Unduh Format Template Guru (.csv)
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {filteredTeachers.map(g => (
+                  <div key={g.id} className="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-heading font-black text-white text-base">{g.nama}</p>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          Guru Aktif
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        NIP: <span className="text-slate-300 font-mono">{g.nip}</span> • {g.mapel}
+                      </p>
+                      <p className="text-xs text-indigo-400 font-mono">
+                        {g.email}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="px-3 py-1 text-xs font-bold rounded-xl bg-slate-800 text-slate-300 border border-slate-700">
+                        Kelas Binaan: {g.kelas}
+                      </span>
+
+                      <button
+                        onClick={() => { triggerHaptic(); setEditItem({ type: 'guru', data: { ...g } }); }}
+                        className="p-2 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white transition active:scale-95"
+                        title="Edit Data Guru"
+                      >
+                        <Edit3 className="w-4 h-4 text-amber-400" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteUser('guru', g.id, g.nama)}
+                        className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition active:scale-95"
+                        title="Hapus Data Guru"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {filteredTeachers.length === 0 && (
+                  <p className="text-center py-8 text-xs text-slate-500">
+                    Tidak ada data guru yang cocok dengan pencarian.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* STUDENTS LIST */}
+          {userSubTab === 'siswa' && (
+            <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 className="font-heading font-bold text-white text-base flex items-center gap-2">
+                  <Users className="w-5 h-5 text-emerald-400" />
+                  Daftar Siswa Kelas X SMKN 1 Sidayu ({filteredStudents.length} Siswa Terdaftar)
+                </h3>
+                <button
+                  onClick={() => handleDownloadTemplate('siswa')}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Unduh Format Template Siswa (.csv)
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {filteredStudents.map(s => (
+                  <div key={s.id} className="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-heading font-black text-white text-base">{s.nama}</p>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          {s.kelas}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        NIS: <span className="text-slate-300 font-mono">{s.nis}</span> • Jurusan: <span className="text-slate-300">{s.jurusan}</span>
+                      </p>
+                      <p className="text-xs text-indigo-400 font-mono">
+                        {s.email}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        onClick={() => { triggerHaptic(); setEditItem({ type: 'siswa', data: { ...s } }); }}
+                        className="p-2 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white transition active:scale-95"
+                        title="Edit Data Siswa"
+                      >
+                        <Edit3 className="w-4 h-4 text-emerald-400" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteUser('siswa', s.id, s.nama)}
+                        className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition active:scale-95"
+                        title="Hapus Data Siswa"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {filteredStudents.length === 0 && (
+                  <p className="text-center py-8 text-xs text-slate-500">
+                    Tidak ada data siswa yang cocok dengan pencarian.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* TAB 2: KELOLA KELAS */}
+      {/* TAB 2: EDIT PROFIL ADMIN JUGA */}
+      {activeTab === 'admin-profile' && (
+        <div className="max-w-3xl mx-auto space-y-6">
+          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl flex items-center justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 text-xs font-bold mb-2 border border-rose-500/30">
+                <UserCog className="w-3.5 h-3.5 text-rose-400" />
+                Pengaturan Akun Administrator
+              </div>
+              <h2 className="font-heading font-black text-2xl text-white">
+                Edit Profil Administrator SMKN 1 Sidayu
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                Perbarui nama lengkap, jabatan, foto profil avatar, dan catatan administrator sistem.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveAdminProfile} className="p-6 sm:p-8 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-6">
+            {/* Avatar Selector */}
+            <div className="p-4 rounded-2xl bg-slate-800/70 border border-slate-700/60 space-y-3">
+              <label className="block text-xs font-bold text-slate-200 uppercase tracking-wide flex items-center gap-1.5">
+                <Smile className="w-4 h-4 text-amber-400" />
+                Pilih Karakter Foto Avatar Administrator
+              </label>
+
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+                {PRESET_AVATARS.map(av => (
+                  <button
+                    key={av.id}
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic();
+                      setAdminProfileForm({ ...adminProfileForm, photoURL: av.url });
+                    }}
+                    className={`p-2 rounded-2xl border transition-all text-center flex flex-col items-center gap-1 active:scale-95 ${
+                      adminProfileForm.photoURL === av.url 
+                        ? 'bg-rose-500/20 border-rose-400 ring-2 ring-rose-400 scale-105' 
+                        : 'bg-slate-900 border-slate-700 hover:border-slate-500'
+                    }`}
+                  >
+                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-950">
+                      <img src={av.url} alt={av.label} className="w-full h-full object-cover" />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-300 truncate max-w-[80px]">
+                      {av.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-1">
+                <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                  Atau URL Foto Khusus:
+                </label>
+                <input
+                  type="url"
+                  value={adminProfileForm.photoURL}
+                  onChange={e => setAdminProfileForm({ ...adminProfileForm, photoURL: e.target.value })}
+                  placeholder="https://images.unsplash.com/... atau URL foto"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-rose-400"
+                />
+              </div>
+            </div>
+
+            {/* Inputs Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-200 uppercase tracking-wide mb-1.5">
+                  Nama Lengkap Administrator *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={adminProfileForm.nama}
+                  onChange={e => setAdminProfileForm({ ...adminProfileForm, nama: e.target.value })}
+                  placeholder="Heru Administrator SMKN 1 Sidayu"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white font-bold focus:outline-none focus:border-rose-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-200 uppercase tracking-wide mb-1.5">
+                  NIP / ID Pegawai
+                </label>
+                <input
+                  type="text"
+                  value={adminProfileForm.nip}
+                  onChange={e => setAdminProfileForm({ ...adminProfileForm, nip: e.target.value })}
+                  placeholder="19840218 200902 1 004"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-rose-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-200 uppercase tracking-wide mb-1.5">
+                  Nama Sekolah
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value="SMKN 1 Sidayu"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-slate-700 text-sm text-amber-300 font-bold cursor-not-allowed"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-200 uppercase tracking-wide mb-1.5">
+                  Jabatan / Unit Tugas Administrator
+                </label>
+                <input
+                  type="text"
+                  value={adminProfileForm.jabatan}
+                  onChange={e => setAdminProfileForm({ ...adminProfileForm, jabatan: e.target.value })}
+                  placeholder="Koordinator IT & Administrator SMKN 1 Sidayu"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-rose-400"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-200 uppercase tracking-wide mb-1.5">
+                  Email Akun Terdaftar (Super Admin)
+                </label>
+                <input
+                  type="email"
+                  readOnly
+                  value={adminProfileForm.email}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-slate-700 text-sm text-slate-400 font-mono cursor-not-allowed"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Email super admin terhubung dengan hak akses penuh sistem sekolah.
+                </p>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-200 uppercase tracking-wide mb-1.5">
+                  Bio / Catatan Visi Pembelajaran Admin
+                </label>
+                <textarea
+                  rows={2}
+                  value={adminProfileForm.bio}
+                  onChange={e => setAdminProfileForm({ ...adminProfileForm, bio: e.target.value })}
+                  placeholder="Tuliskan catatan atau visi administrator..."
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-rose-400"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-3 border-t border-slate-800">
+              <button
+                type="submit"
+                className="px-7 py-3 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:brightness-110 text-white font-heading font-black text-sm shadow-xl shadow-rose-600/25 active:scale-95 transition flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Simpan & Perbarui Profil Admin
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* TAB 3: KELOLA KELAS KEJURUAN */}
       {activeTab === 'classes' && (
         <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-          <h3 className="font-heading font-bold text-white text-base flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-indigo-400" />
-            Daftar Rombongan Belajar (Rombel) Kelas X SMK
-          </h3>
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div>
+              <h3 className="font-heading font-bold text-white text-base flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-indigo-400" />
+                Daftar Rombongan Belajar (Rombel) Kelas X SMKN 1 Sidayu
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Rombel terdaftar dalam Fase E Kurikulum Merdeka Kejuruan.
+              </p>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {classes.map(c => (
@@ -252,7 +1009,7 @@ export const AdminManagement: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: MONITORING BANK SOAL (300+ SOAL) */}
+      {/* TAB 4: MONITORING BANK SOAL (300+ SOAL) */}
       {activeTab === 'questions' && (
         <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
@@ -262,13 +1019,13 @@ export const AdminManagement: React.FC = () => {
                 Bank Soal Grammar Aktif ({GRAMMAR_QUESTION_BANK.length} Butir Soal Terverifikasi)
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Mencakup 6 kategori grammar Kurikulum Merdeka dan 3 tingkat kesulitan.
+                Mencakup 6 kategori grammar Kurikulum Merdeka SMKN 1 Sidayu dan 3 tingkat kesulitan.
               </p>
             </div>
           </div>
 
           <div className="space-y-3 max-h-96 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-700">
-            {GRAMMAR_QUESTION_BANK.slice(0, 15).map((q, idx) => (
+            {GRAMMAR_QUESTION_BANK.slice(0, 15).map((q) => (
               <div key={q.id} className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/50 space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold">
@@ -284,16 +1041,16 @@ export const AdminManagement: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 4: BACKUP & RESTORE DATA */}
+      {/* TAB 5: BACKUP & RESTORE DATA */}
       {activeTab === 'backup' && (
         <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-6">
           <div>
             <h3 className="font-heading font-black text-white text-lg flex items-center gap-2">
               <Database className="w-5 h-5 text-rose-400" />
-              Backup & Restore Data Sekolah
+              Backup & Restore Data SMKN 1 Sidayu
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Simpan cadangan data seluruh siswa, nilai, kelas, dan soal secara aman dalam format JSON terenkripsi.
+              Simpan cadangan data seluruh siswa, guru, nilai, kelas, dan soal secara aman dalam format JSON terenkripsi.
             </p>
           </div>
 
@@ -312,7 +1069,7 @@ export const AdminManagement: React.FC = () => {
               </div>
               <h4 className="font-heading font-bold text-white text-base">Ekspor Cadangan (Backup Data)</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Unduh file arsip berformat JSON berisi seluruh riwayat nilai, master soal, dan data siswa sekolah.
+                Unduh file arsip berformat JSON berisi seluruh riwayat nilai, master soal, dan data siswa SMKN 1 Sidayu.
               </p>
               <button
                 onClick={handleBackup}
@@ -329,7 +1086,7 @@ export const AdminManagement: React.FC = () => {
               </div>
               <h4 className="font-heading font-bold text-white text-base">Pulihkan Data (Restore Data)</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Unggah file cadangan JSON yang sebelumnya diekspor untuk memulihkan keadaan data sistem.
+                Unggah file cadangan JSON yang sebelumnya diekspor untuk memulihkan keadaan data sistem SMKN 1 Sidayu.
               </p>
               <label className="block w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-heading font-bold text-sm shadow-lg shadow-emerald-600/30 transition cursor-pointer text-center">
                 Pilih File Cadangan JSON
@@ -345,12 +1102,12 @@ export const AdminManagement: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 5: LOG AKTIVITAS */}
+      {/* TAB 6: LOG AKTIVITAS */}
       {activeTab === 'logs' && (
         <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
           <h3 className="font-heading font-bold text-white text-base flex items-center gap-2">
             <Activity className="w-5 h-5 text-cyan-400" />
-            Audit Log Aktivitas Terkini
+            Audit Log Aktivitas Terkini SMKN 1 Sidayu
           </h3>
 
           <div className="space-y-2.5">
@@ -368,6 +1125,481 @@ export const AdminManagement: React.FC = () => {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 1: INPUT DARI TEMPLATE CSV/EXCEL / SALIN-TEMPEL */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-black text-lg sm:text-xl text-white">
+                    Input Data Pengguna dari Template
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    SMKN 1 Sidayu • Unggah file CSV atau salin-tempel baris data dari Excel / Spreadsheet.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTemplateModal(false)}
+                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Role Selector & Download Template */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
+                  Pilih Target Impor:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTemplateTargetRole('siswa');
+                      if (rawPastedText) handleParseText(rawPastedText, 'siswa');
+                    }}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                      templateTargetRole === 'siswa'
+                        ? 'bg-emerald-600 text-white border-emerald-400 shadow-md'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    Data Siswa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTemplateTargetRole('guru');
+                      if (rawPastedText) handleParseText(rawPastedText, 'guru');
+                    }}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                      templateTargetRole === 'guru'
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    Data Guru
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase mb-1">
+                  Unduh Format Template:
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadTemplate(templateTargetRole)}
+                  className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 font-bold text-xs border border-slate-700 flex items-center justify-center gap-2 transition"
+                >
+                  <Download className="w-4 h-4" />
+                  Unduh Template CSV {templateTargetRole === 'guru' ? 'Guru' : 'Siswa'}
+                </button>
+              </div>
+            </div>
+
+            {/* File Upload OR Paste Box */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
+                <span className="flex items-center gap-1.5">
+                  <Upload className="w-4 h-4 text-indigo-400" />
+                  Unggah File .CSV / .TXT
+                </span>
+                <span className="text-[11px] text-slate-500">atau salin baris dari Excel di bawah</span>
+              </div>
+
+              <input
+                type="file"
+                accept=".csv, .txt"
+                onChange={handleFileUpload}
+                className="w-full text-xs text-slate-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer bg-slate-800/80 p-2 rounded-2xl border border-slate-700"
+              />
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase mb-1 flex items-center gap-1.5">
+                  <ClipboardPaste className="w-4 h-4 text-amber-400" />
+                  Atau Tempel (Paste) Teks Baris dari Excel / Spreadsheet:
+                </label>
+                <textarea
+                  rows={4}
+                  value={rawPastedText}
+                  onChange={(e) => {
+                    setRawPastedText(e.target.value);
+                    handleParseText(e.target.value, templateTargetRole);
+                  }}
+                  placeholder={
+                    templateTargetRole === 'guru'
+                      ? 'Nama\tNIP\tMata Pelajaran\tKelas\tEmail\nBambang Trianto S.Pd.\t19850412...\tBahasa Inggris\tX RPL 1\tbambang@smkn1sidayu.sch.id'
+                      : 'Nama\tNIS\tKelas\tJurusan\tEmail\nAhmad Rizky\t232410145\tX RPL 1\tRekayasa Perangkat Lunak\trizky@smkn1sidayu.sch.id'
+                  }
+                  className="w-full p-3 rounded-2xl bg-slate-800 border border-slate-700 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* Error notice */}
+            {parseError && (
+              <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500 text-rose-300 text-xs font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{parseError}</span>
+              </div>
+            )}
+
+            {/* Live Preview Table */}
+            {parsedPreview.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-emerald-400">
+                  <span>Pratinjau Hasil Pembacaan ({parsedPreview.length} Baris Siap Diimpor)</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Format Terdeteksi Valid</span>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/80 p-2 space-y-1.5">
+                  {parsedPreview.slice(0, 8).map((p, idx) => (
+                    <div key={idx} className="p-2 rounded-lg bg-slate-900 border border-slate-800/80 flex items-center justify-between text-[11px]">
+                      <div>
+                        <span className="font-bold text-white">{p.nama}</span>
+                        <span className="text-slate-400 ml-2">
+                          ({templateTargetRole === 'guru' ? `NIP: ${p.nip}` : `NIS: ${p.nis}`})
+                        </span>
+                      </div>
+                      <div className="text-indigo-400 font-mono">
+                        {templateTargetRole === 'guru' ? p.kelas : `${p.kelas} • ${p.jurusan}`}
+                      </div>
+                    </div>
+                  ))}
+                  {parsedPreview.length > 8 && (
+                    <p className="text-center text-[10px] text-slate-500 py-1 italic">
+                      + {parsedPreview.length - 8} baris data lainnya...
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowTemplateModal(false)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={parsedPreview.length === 0}
+                onClick={handleCommitTemplateImport}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 disabled:opacity-50 text-slate-950 font-heading font-black text-xs sm:text-sm shadow-lg shadow-emerald-500/20 flex items-center gap-2 active:scale-95"
+              >
+                <Save className="w-4 h-4" />
+                Konfirmasi & Impor {parsedPreview.length} Data ke Sistem
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: INPUT MANUAL USER */}
+      {showManualModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-heading font-black text-lg sm:text-xl text-white flex items-center gap-2">
+                <Plus className="w-5 h-5 text-amber-400" />
+                Tambah Manual Data {userSubTab === 'guru' ? 'Guru' : 'Siswa'} SMKN 1 Sidayu
+              </h3>
+              <button
+                onClick={() => setShowManualModal(false)}
+                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddManualSubmit} className="space-y-4 text-xs">
+              {/* Form Guru Manual */}
+              {userSubTab === 'guru' ? (
+                <>
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap & Gelar *</label>
+                    <input
+                      type="text"
+                      required
+                      value={manualTeacher.nama}
+                      onChange={e => setManualTeacher({ ...manualTeacher, nama: e.target.value })}
+                      placeholder="Contoh: Dra. Siti Aminah, M.Pd."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">NIP / NUPTK</label>
+                      <input
+                        type="text"
+                        value={manualTeacher.nip}
+                        onChange={e => setManualTeacher({ ...manualTeacher, nip: e.target.value })}
+                        placeholder="19820315 200801 2 005"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">Kelas Binaan</label>
+                      <input
+                        type="text"
+                        value={manualTeacher.kelas}
+                        onChange={e => setManualTeacher({ ...manualTeacher, kelas: e.target.value })}
+                        placeholder="X RPL 1, X TKJ 1"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Mata Pelajaran</label>
+                    <input
+                      type="text"
+                      value={manualTeacher.mapel}
+                      onChange={e => setManualTeacher({ ...manualTeacher, mapel: e.target.value })}
+                      placeholder="Bahasa Inggris SMKN 1 Sidayu Kelas X"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Email Resmi Guru</label>
+                    <input
+                      type="email"
+                      value={manualTeacher.email}
+                      onChange={e => setManualTeacher({ ...manualTeacher, email: e.target.value })}
+                      placeholder="guru@smkn1sidayu.sch.id"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </>
+              ) : (
+                /* Form Siswa Manual */
+                <>
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap Siswa *</label>
+                    <input
+                      type="text"
+                      required
+                      value={manualStudent.nama}
+                      onChange={e => setManualStudent({ ...manualStudent, nama: e.target.value })}
+                      placeholder="Contoh: Muhammad Akbar Ramadhan"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">NIS (Nomor Induk Siswa) *</label>
+                      <input
+                        type="text"
+                        required
+                        value={manualStudent.nis}
+                        onChange={e => setManualStudent({ ...manualStudent, nis: e.target.value })}
+                        placeholder="242510001"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">Kelas Kejuruan *</label>
+                      <select
+                        value={manualStudent.kelas}
+                        onChange={e => setManualStudent({ ...manualStudent, kelas: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
+                      >
+                        {[
+                          'X RPL 1', 'X RPL 2', 
+                          'X TKJ 1', 'X TKJ 2', 
+                          'X AKL 1', 'X AKL 2', 
+                          'X Otomotif 1', 'X DPIB 1', 
+                          'X Kuliner 1', 'X DKV 1'
+                        ].map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Jurusan / Konsentrasi Keahlian *</label>
+                    <input
+                      type="text"
+                      required
+                      value={manualStudent.jurusan}
+                      onChange={e => setManualStudent({ ...manualStudent, jurusan: e.target.value })}
+                      placeholder="Contoh: Rekayasa Perangkat Lunak"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Email Siswa SMKN 1 Sidayu</label>
+                    <input
+                      type="email"
+                      value={manualStudent.email}
+                      onChange={e => setManualStudent({ ...manualStudent, email: e.target.value })}
+                      placeholder="siswa@smkn1sidayu.sch.id"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowManualModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-heading font-black shadow-lg shadow-amber-500/20 active:scale-95"
+                >
+                  Simpan Data
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: EDIT USER */}
+      {editItem && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-heading font-black text-lg text-white flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-indigo-400" />
+                Edit Data {editItem.type === 'guru' ? 'Guru' : 'Siswa'}
+              </h3>
+              <button
+                onClick={() => setEditItem(null)}
+                className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Nama Lengkap</label>
+                <input
+                  type="text"
+                  required
+                  value={editItem.data.nama}
+                  onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, nama: e.target.value } })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+
+              {editItem.type === 'guru' ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">NIP</label>
+                      <input
+                        type="text"
+                        value={editItem.data.nip}
+                        onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, nip: e.target.value } })}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">Kelas Binaan</label>
+                      <input
+                        type="text"
+                        value={editItem.data.kelas}
+                        onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, kelas: e.target.value } })}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Mata Pelajaran</label>
+                    <input
+                      type="text"
+                      value={editItem.data.mapel}
+                      onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, mapel: e.target.value } })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">NIS</label>
+                      <input
+                        type="text"
+                        value={editItem.data.nis}
+                        onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, nis: e.target.value } })}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">Kelas</label>
+                      <input
+                        type="text"
+                        value={editItem.data.kelas}
+                        onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, kelas: e.target.value } })}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-300 uppercase mb-1">Jurusan</label>
+                    <input
+                      type="text"
+                      value={editItem.data.jurusan}
+                      onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, jurusan: e.target.value } })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editItem.data.email}
+                  onChange={e => setEditItem({ ...editItem, data: { ...editItem.data, email: e.target.value } })}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditItem(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-heading font-black shadow-lg shadow-indigo-600/20 active:scale-95"
+                >
+                  Perbarui Perubahan
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

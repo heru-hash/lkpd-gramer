@@ -37,10 +37,13 @@ service cloud.firestore {
     // Users Collection - Hardened RBAC
     match /users/{userId} {
       allow read: if isSignedIn();
-      // Block privilege escalation: only designated admin email can obtain 'admin' role
-      allow create: if isSignedIn() && isOwner(userId) && (
-        (request.resource.data.role == 'admin' && request.auth.token.email == 'heru@smanike-gresik.sch.id') ||
-        (request.resource.data.role in ['siswa', 'guru'] && request.resource.data.role != 'admin')
+      // Block privilege escalation: admin can create users, or user can self-register
+      allow create: if isSignedIn() && (
+        isAdmin() ||
+        (isOwner(userId) && (
+          (request.resource.data.role == 'admin' && request.auth.token.email == 'heru@smanike-gresik.sch.id') ||
+          (request.resource.data.role in ['siswa', 'guru'] && request.resource.data.role != 'admin')
+        ))
       );
       // Prevent users from tampering with role, uid, or email
       allow update: if isSignedIn() && (

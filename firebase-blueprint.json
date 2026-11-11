@@ -14,6 +14,8 @@
         "nis": { "type": "string", "maxLength": 30 },
         "nip": { "type": "string", "maxLength": 30 },
         "mataPelajaran": { "type": "string", "maxLength": 100 },
+        "sekolah": { "type": "string", "maxLength": 100 },
+        "jabatan": { "type": "string", "maxLength": 100 },
         "photoURL": { "type": "string", "maxLength": 500 },
         "bio": { "type": "string", "maxLength": 300 },
         "targetScore": { "type": "number" },

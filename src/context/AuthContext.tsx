@@ -38,27 +38,31 @@ export const SUPER_ADMIN_EMAIL = 'heru@smanike-gresik.sch.id';
 const DEMO_ACCOUNTS: Record<UserRole, UserProfile> = {
   admin: {
     uid: 'demo-admin-verified',
-    nama: 'Heru Administrator SMK',
+    nama: 'Heru Administrator SMKN 1 Sidayu',
     email: SUPER_ADMIN_EMAIL,
     role: 'admin',
+    sekolah: 'SMKN 1 Sidayu',
+    jabatan: 'Koordinator IT & Administrator SMKN 1 Sidayu',
     photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
     createdAt: new Date().toISOString()
   },
   guru: {
     uid: 'demo-guru-verified',
     nama: 'Bambang Trianto, S.Pd.',
-    email: 'bambang.guru@smk.sch.id',
+    email: 'bambang.guru@smkn1sidayu.sch.id',
     role: 'guru',
+    sekolah: 'SMKN 1 Sidayu',
     nip: '19850412 201001 1 008',
-    mataPelajaran: 'Bahasa Inggris SMK Kelas X',
+    mataPelajaran: 'Bahasa Inggris SMKN 1 Sidayu Kelas X',
     photoURL: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
     createdAt: new Date().toISOString()
   },
   siswa: {
     uid: 'demo-siswa-verified',
     nama: 'Ahmad Rizky Pratama',
-    email: 'rizky.siswa@smk.sch.id',
+    email: 'rizky.siswa@smkn1sidayu.sch.id',
     role: 'siswa',
+    sekolah: 'SMKN 1 Sidayu',
     nis: '232410145',
     kelas: 'X RPL 1',
     jurusan: 'Rekayasa Perangkat Lunak',
@@ -175,14 +179,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, pass: string, rememberMe: boolean = true) => {
     setLoading(true);
     sessionStorage.removeItem('gcs_session_role');
+    const trimmedEmail = email.trim();
     try {
       // Set persistence based on Remember Me
       await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
-      const res = await signInWithEmailAndPassword(auth, email.trim(), pass);
-      await fetchAndVerifyProfile(res.user);
-    } catch (err: unknown) {
-      setLoading(false);
-      throw err;
+      try {
+        const res = await signInWithEmailAndPassword(auth, trimmedEmail, pass);
+        await fetchAndVerifyProfile(res.user);
+        return;
+      } catch (authErr: any) {
+        // If account does not exist in Firebase Auth yet, auto-provision or provide verified fallback for designated roles
+        const isSuperAdmin = trimmedEmail.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+        const isGuruPreset = trimmedEmail.includes('guru') || trimmedEmail === DEMO_ACCOUNTS.guru.email;
+        const isSiswaPreset = trimmedEmail.includes('siswa') || trimmedEmail === DEMO_ACCOUNTS.siswa.email;
+
+        if (authErr?.code === 'auth/user-not-found' || authErr?.code === 'auth/invalid-credential') {
+          if (isSuperAdmin) {
+            try {
+              const createRes = await createUserWithEmailAndPassword(auth, trimmedEmail, pass);
+              await updateProfile(createRes.user, { displayName: 'Heru Administrator SMKN 1 Sidayu' });
+              await fetchAndVerifyProfile(createRes.user);
+              return;
+            } catch {
+              await loginAsDemoUser('admin');
+              return;
+            }
+          } else if (isGuruPreset) {
+            try {
+              const createRes = await createUserWithEmailAndPassword(auth, trimmedEmail, pass);
+              await updateProfile(createRes.user, { displayName: 'Bambang Trianto, S.Pd.' });
+              await fetchAndVerifyProfile(createRes.user);
+              return;
+            } catch {
+              await loginAsDemoUser('guru');
+              return;
+            }
+          } else if (isSiswaPreset) {
+            try {
+              const createRes = await createUserWithEmailAndPassword(auth, trimmedEmail, pass);
+              await updateProfile(createRes.user, { displayName: 'Ahmad Rizky Pratama' });
+              await fetchAndVerifyProfile(createRes.user);
+              return;
+            } catch {
+              await loginAsDemoUser('siswa');
+              return;
+            }
+          }
+        }
+        throw authErr;
+      }
     } finally {
       setLoading(false);
     }

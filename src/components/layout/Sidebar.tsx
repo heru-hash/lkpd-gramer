@@ -95,7 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-4 mx-3 mt-3 rounded-2xl bg-gradient-to-r from-indigo-900/40 via-purple-900/30 to-pink-900/20 border border-indigo-700/30">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-300">
-              SMK Fase E • Kelas X
+              SMKN 1 Sidayu • Fase E
             </span>
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
@@ -103,7 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             Grammar Challenge Hub
           </p>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            Interactive Flat Panel Optimized
+            SMKN 1 Sidayu • IFP Optimized
           </p>
         </div>
 

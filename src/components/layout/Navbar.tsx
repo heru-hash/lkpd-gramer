@@ -79,11 +79,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                   Grammar Challenge X
                 </span>
                 <span className="hidden md:inline-flex px-2 py-0.5 text-[11px] font-bold tracking-wide uppercase rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  SMK Merdeka
+                  SMKN 1 Sidayu
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 hidden sm:block">
-                Interactive Flat Panel & Touchscreen English Gaming
+                SMKN 1 Sidayu • Interactive Flat Panel & Touchscreen English Gaming
               </p>
             </div>
           </div>
